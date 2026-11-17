@@ -17,22 +17,27 @@ cd ..\nadia
 .\gradlew.bat :nadia-plugin-api:publishToMavenLocal
 ```
 
-## Building & Testing Plugins
+## Building & Packaging Plugins
 
-Build and test all plugin subprojects:
+Build all final plugin `.jar` files into `dist/`:
 
 ```powershell
-.\gradlew.bat build
+# Windows (Batch / PowerShell):
+.\build.bat
+
+# Run tests and also install into ~/.nadia/plugins/:
+.\build.bat --with-tests --install
 ```
 
-Install all built plugin `.jar` archives directly into `~/.nadia/plugins/`:
+```bash
+# macOS / Linux:
+./build.sh
+./build.sh --with-tests --install
+```
+
+You can also invoke Gradle tasks directly:
 
 ```powershell
+.\gradlew.bat packagePlugins
 .\gradlew.bat installPlugin
-```
-
-Or install only `world-map-viewer`:
-
-```powershell
-.\gradlew.bat :world-map-viewer:installPlugin
 ```

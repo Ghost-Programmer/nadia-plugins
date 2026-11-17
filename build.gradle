@@ -61,3 +61,17 @@ subprojects {
         into("${System.getProperty('user.home')}/.nadia/plugins")
     }
 }
+
+tasks.register('cleanDist', Delete) {
+    group = 'nadia'
+    description = 'Removes packaged plugin JARs from dist/.'
+    delete layout.projectDirectory.dir('dist')
+}
+
+tasks.register('packagePlugins', Sync) {
+    group = 'nadia'
+    description = 'Builds all PF4J plugin subprojects and collects final plugin JARs into dist/.'
+    dependsOn subprojects.collect { it.tasks.named('jar') }
+    from(subprojects.collect { it.tasks.named('jar') })
+    into(layout.projectDirectory.dir('dist'))
+}
