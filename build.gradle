@@ -2,9 +2,13 @@ plugins {
     id 'org.openjfx.javafxplugin' version '0.1.0' apply false
 }
 
+def rootPluginsVersion = providers.gradleProperty('pluginsVersion').getOrElse('1.0.0')
+def hostPluginApiVersion = providers.gradleProperty('pluginApiVersion').getOrElse('1.0.0')
+def cliPluginsVersionOverride = providers.gradleProperty('pluginsVersionOverride')
+
 allprojects {
     group = 'com.nadia.plugins'
-    version = '1.0.0'
+    version = cliPluginsVersionOverride.getOrElse(rootPluginsVersion)
 
     repositories {
         mavenLocal()
@@ -13,8 +17,14 @@ allprojects {
     }
 }
 
-subprojects {
+subprojects { subproject ->
     apply plugin: 'java'
+
+    def perPluginVersion = providers.gradleProperty("${subproject.name}.version")
+    subproject.version = cliPluginsVersionOverride
+            .orElse(perPluginVersion)
+            .orElse(providers.gradleProperty('pluginsVersion'))
+            .getOrElse('1.0.0')
 
     java {
         toolchain {
@@ -33,7 +43,7 @@ subprojects {
 
     dependencies {
         compileOnly platform('org.springframework.ai:spring-ai-bom:1.0.0-M6')
-        compileOnly 'com.nadia:nadia-plugin-api:1.0.0'
+        compileOnly "com.nadia:nadia-plugin-api:${hostPluginApiVersion}"
         annotationProcessor 'org.pf4j:pf4j:3.12.0'
 
         testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
@@ -55,10 +65,27 @@ subprojects {
 
     tasks.register('installPlugin', Copy) {
         group = 'nadia'
-        description = 'Builds and installs this PF4J plugin JAR into ~/.nadia/plugins/'
-        dependsOn tasks.named('jar')
-        from(tasks.named('jar'))
-        into("${System.getProperty('user.home')}/.nadia/plugins")
+        description = 'Builds and installs this PF4J plugin JAR into ~/.nadia/plugins/, removing older versions of the same plugin.'
+        def jarTask = tasks.named('jar', Jar)
+        def targetPluginsDir = file("${System.getProperty('user.home')}/.nadia/plugins")
+        dependsOn jarTask
+        from(jarTask)
+        into(targetPluginsDir)
+        doFirst {
+            def baseName = jarTask.get().archiveBaseName.get()
+            def currentFileName = jarTask.get().archiveFileName.get()
+            if (targetPluginsDir.isDirectory()) {
+                targetPluginsDir.listFiles()?.each { existing ->
+                    if (existing.isFile()
+                            && existing.name.startsWith("${baseName}-")
+                            && existing.name.endsWith('.jar')
+                            && existing.name != currentFileName) {
+                        logger.lifecycle("[installPlugin] Removing older plugin archive: ${existing.name}")
+                        existing.delete()
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -70,7 +97,7 @@ tasks.register('cleanDist', Delete) {
 
 tasks.register('packagePlugins', Sync) {
     group = 'nadia'
-    description = 'Builds all PF4J plugin subprojects and collects final plugin JARs into dist/.'
+    description = 'Builds all PF4J plugin subprojects and collects final versioned plugin JARs into dist/.'
     dependsOn subprojects.collect { it.tasks.named('jar') }
     from(subprojects.collect { it.tasks.named('jar') })
     into(layout.projectDirectory.dir('dist'))

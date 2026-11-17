@@ -17,21 +17,30 @@ cd ..\nadia
 .\gradlew.bat :nadia-plugin-api:publishToMavenLocal
 ```
 
-## Building & Packaging Plugins
+## Building, Versioning & Packaging Plugins
 
-Build all final plugin `.jar` files into `dist/`:
+Default versions (`pluginsVersion` and optional per-plugin `<subproject>.version`) are stored in `gradle.properties`. Build all final plugin `.jar` files into `dist/`:
 
 ```powershell
 # Windows (Batch / PowerShell):
 .\build.bat
 
-# Run tests and also install into ~/.nadia/plugins/:
+# Build with a one-off version override:
+.\build.bat --version 1.2.0
+
+# Persist a new global version (or per-plugin version) to gradle.properties and build:
+.\build.bat --set-version 1.2.0
+.\build.bat --plugin world-map-viewer --set-version 1.3.0
+
+# Run tests and also install into ~/.nadia/plugins/ (automatically removes older versions):
 .\build.bat --with-tests --install
 ```
 
 ```bash
 # macOS / Linux:
 ./build.sh
+./build.sh --version 1.2.0
+./build.sh --set-version 1.2.0
 ./build.sh --with-tests --install
 ```
 

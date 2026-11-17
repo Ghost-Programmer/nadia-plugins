@@ -1,0 +1,5 @@
+# Ensure consistent line endings for cross-platform launcher & build scripts
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.sh  text eol=lf
+
