@@ -157,7 +157,9 @@ jobs:
           if ! git diff --quiet gradle.properties; then
             git add gradle.properties
             git commit -m "chore(release): ${TAG_NAME} [skip ci]"
-            git pull --rebase origin "${BRANCH_NAME}"
+            # Discard any incidental filemode changes (e.g. chmod +x on build.sh/gradlew) before rebasing
+            git checkout -- .
+            git pull --rebase --autostash origin "${BRANCH_NAME}"
             git push origin "HEAD:${BRANCH_NAME}"
           fi
 
