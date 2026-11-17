@@ -1,0 +1,4 @@
+rootProject.name = 'nadia-plugins'
+
+include 'world-map-viewer'
+

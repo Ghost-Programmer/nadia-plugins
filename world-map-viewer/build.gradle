@@ -1,0 +1,30 @@
+plugins {
+    id 'org.openjfx.javafxplugin'
+}
+
+description = 'Interactive Leaflet.js World Map Viewer PF4J plugin for Nadia with live OpenSky aviation, FAA Registry, and N2YO satellite tracking.'
+
+javafx {
+    version = '23'
+    modules = [ 'javafx.controls', 'javafx.fxml', 'javafx.web' ]
+    configuration = 'compileOnly'
+}
+
+dependencies {
+    compileOnly 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+}
+
+tasks.named('jar') {
+    archiveBaseName = 'world-map-viewer'
+    manifest {
+        attributes(
+            'Plugin-Id': 'world-map-viewer',
+            'Plugin-Version': project.version.toString(),
+            'Plugin-Provider': 'Miller Software Solutions LLC',
+            'Plugin-Description': project.description,
+            'Plugin-License': 'Apache-2.0',
+            'Plugin-Class': 'com.nadia.plugin.worldmap.WorldMapPlugin'
+        )
+    }
+}
+
