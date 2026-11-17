@@ -12,6 +12,7 @@ allprojects {
 
     repositories {
         mavenLocal()
+        maven { url = uri("${rootProject.projectDir}/maven-repo") }
         mavenCentral()
         maven { url = uri('https://repo.spring.io/milestone') }
     }

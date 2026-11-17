@@ -1,0 +1,381 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.nadia",
+    "module": "nadia-plugin-api",
+    "version": "1.0.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.8.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 23,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "org.springframework.ai",
+          "module": "spring-ai-bom",
+          "version": {
+            "requires": "1.0.0-M6"
+          },
+          "excludes": [
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-reload4j"
+            },
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-log4j12"
+            },
+            {
+              "group": "ch.qos.reload4j",
+              "module": "reload4j"
+            },
+            {
+              "group": "log4j",
+              "module": "log4j"
+            }
+          ],
+          "attributes": {
+            "org.gradle.category": "platform"
+          },
+          "endorseStrictVersions": true
+        },
+        {
+          "group": "org.pf4j",
+          "module": "pf4j",
+          "version": {
+            "requires": "3.12.0"
+          },
+          "excludes": [
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-reload4j"
+            },
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-log4j12"
+            },
+            {
+              "group": "ch.qos.reload4j",
+              "module": "reload4j"
+            },
+            {
+              "group": "log4j",
+              "module": "log4j"
+            }
+          ]
+        },
+        {
+          "group": "org.springframework.ai",
+          "module": "spring-ai-core",
+          "excludes": [
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-reload4j"
+            },
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-log4j12"
+            },
+            {
+              "group": "ch.qos.reload4j",
+              "module": "reload4j"
+            },
+            {
+              "group": "log4j",
+              "module": "log4j"
+            }
+          ]
+        },
+        {
+          "group": "org.slf4j",
+          "module": "slf4j-api",
+          "version": {
+            "requires": "2.0.16"
+          },
+          "excludes": [
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-reload4j"
+            },
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-log4j12"
+            },
+            {
+              "group": "ch.qos.reload4j",
+              "module": "reload4j"
+            },
+            {
+              "group": "log4j",
+              "module": "log4j"
+            }
+          ]
+        }
+      ],
+      "files": [
+        {
+          "name": "nadia-plugin-api-1.0.0.jar",
+          "url": "nadia-plugin-api-1.0.0.jar",
+          "size": 11064,
+          "sha512": "3876173b7f2bf90ac24e3e4e1fad026980762bf75e05f184039f06aae9973f23a72460a0e9acdb1cb6b656a932ad30fe35c74e2ebae3773ad188e51d09f038e2",
+          "sha256": "24b66e7b40e6aed7ff8e8d1f7fbde9aca52c3fa19814af222c56d008ea0db852",
+          "sha1": "6a645bd065b030c40619703533344c99d87a40c4",
+          "md5": "fa9c7b651321da4bbf0ef2cc0def5949"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 23,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "org.openjfx",
+          "module": "javafx-controls",
+          "version": {
+            "requires": "23"
+          },
+          "excludes": [
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-reload4j"
+            },
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-log4j12"
+            },
+            {
+              "group": "ch.qos.reload4j",
+              "module": "reload4j"
+            },
+            {
+              "group": "log4j",
+              "module": "log4j"
+            }
+          ]
+        },
+        {
+          "group": "org.openjfx",
+          "module": "javafx-fxml",
+          "version": {
+            "requires": "23"
+          },
+          "excludes": [
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-reload4j"
+            },
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-log4j12"
+            },
+            {
+              "group": "ch.qos.reload4j",
+              "module": "reload4j"
+            },
+            {
+              "group": "log4j",
+              "module": "log4j"
+            }
+          ]
+        },
+        {
+          "group": "org.openjfx",
+          "module": "javafx-web",
+          "version": {
+            "requires": "23"
+          },
+          "excludes": [
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-reload4j"
+            },
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-log4j12"
+            },
+            {
+              "group": "ch.qos.reload4j",
+              "module": "reload4j"
+            },
+            {
+              "group": "log4j",
+              "module": "log4j"
+            }
+          ]
+        },
+        {
+          "group": "org.springframework.ai",
+          "module": "spring-ai-bom",
+          "version": {
+            "requires": "1.0.0-M6"
+          },
+          "excludes": [
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-reload4j"
+            },
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-log4j12"
+            },
+            {
+              "group": "ch.qos.reload4j",
+              "module": "reload4j"
+            },
+            {
+              "group": "log4j",
+              "module": "log4j"
+            }
+          ],
+          "attributes": {
+            "org.gradle.category": "platform"
+          },
+          "endorseStrictVersions": true
+        },
+        {
+          "group": "org.pf4j",
+          "module": "pf4j",
+          "version": {
+            "requires": "3.12.0"
+          },
+          "excludes": [
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-reload4j"
+            },
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-log4j12"
+            },
+            {
+              "group": "ch.qos.reload4j",
+              "module": "reload4j"
+            },
+            {
+              "group": "log4j",
+              "module": "log4j"
+            }
+          ]
+        },
+        {
+          "group": "org.springframework.ai",
+          "module": "spring-ai-core",
+          "excludes": [
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-reload4j"
+            },
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-log4j12"
+            },
+            {
+              "group": "ch.qos.reload4j",
+              "module": "reload4j"
+            },
+            {
+              "group": "log4j",
+              "module": "log4j"
+            }
+          ]
+        },
+        {
+          "group": "org.slf4j",
+          "module": "slf4j-api",
+          "version": {
+            "requires": "2.0.16"
+          },
+          "excludes": [
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-reload4j"
+            },
+            {
+              "group": "org.slf4j",
+              "module": "slf4j-log4j12"
+            },
+            {
+              "group": "ch.qos.reload4j",
+              "module": "reload4j"
+            },
+            {
+              "group": "log4j",
+              "module": "log4j"
+            }
+          ]
+        }
+      ],
+      "files": [
+        {
+          "name": "nadia-plugin-api-1.0.0.jar",
+          "url": "nadia-plugin-api-1.0.0.jar",
+          "size": 11064,
+          "sha512": "3876173b7f2bf90ac24e3e4e1fad026980762bf75e05f184039f06aae9973f23a72460a0e9acdb1cb6b656a932ad30fe35c74e2ebae3773ad188e51d09f038e2",
+          "sha256": "24b66e7b40e6aed7ff8e8d1f7fbde9aca52c3fa19814af222c56d008ea0db852",
+          "sha1": "6a645bd065b030c40619703533344c99d87a40c4",
+          "md5": "fa9c7b651321da4bbf0ef2cc0def5949"
+        }
+      ]
+    },
+    {
+      "name": "sourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "nadia-plugin-api-1.0.0-sources.jar",
+          "url": "nadia-plugin-api-1.0.0-sources.jar",
+          "size": 11467,
+          "sha512": "62ed3b3e9cb6f9e7ee7b84bb1c0f03dff74eb7219f7fe3ad6d15b93856f8f4c3eddbb45074d3b5b14ae0551e3ac352b55c094683e612a9a7fb6c813970c21213",
+          "sha256": "44aaddd7459651110084150aeab3a3346cd3fac9f8acd421165d5ee13d9cf457",
+          "sha1": "bd9866852edbbbe92f5ac96c456472ef8a642b12",
+          "md5": "e7f6ce3182dc07ddd9e9ab55df5f9ddf"
+        }
+      ]
+    },
+    {
+      "name": "javadocElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "javadoc",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "nadia-plugin-api-1.0.0-javadoc.jar",
+          "url": "nadia-plugin-api-1.0.0-javadoc.jar",
+          "size": 4197493,
+          "sha512": "042e0ea7973706d7acf1b90a0042627b4ec1bdbcb8adcc3d6fc76c2734b38b773a0d31eea1281dc057d4db07c6538e057bf25d730a29680e7995bd1ed51f7b47",
+          "sha256": "e2ba802c64583ea540a76703e56aacddc0639fdd77c19a00aef10cbd5b9b8412",
+          "sha1": "ff9932a9e5b6406b3dd61c2ef3abd2dea1488e97",
+          "md5": "90e6e0f697557b1d756a46d714d9ccaf"
+        }
+      ]
+    }
+  ]
+}
