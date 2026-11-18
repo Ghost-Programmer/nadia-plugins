@@ -1,5 +1,6 @@
 package com.nadia.plugin.web.ui;
 
+import com.nadia.app.plugin.api.NadiaPluginContext;
 import com.nadia.plugin.web.WebInterfaceRuntime;
 import com.nadia.plugin.web.config.WebInterfaceConfig;
 import com.nadia.plugin.web.server.WebInterfaceServer;
@@ -58,33 +59,53 @@ public final class WebInterfaceSettingsTab {
      * @return non-closable JavaFX {@link Tab}
      */
     public static Tab create(WebInterfaceRuntime runtime) {
-        Tab tab = new Tab("🌐 Web Interface");
+        return create(runtime, null);
+    }
+
+    /**
+     * Constructs a localized {@link Tab} containing the full Web Interface configuration UI bound to
+     * {@link WebInterfaceRuntime} and {@link NadiaPluginContext}.
+     *
+     * @param runtime active {@link WebInterfaceRuntime} coordinator
+     * @param context optional host {@link NadiaPluginContext} used to resolve localized labels
+     * @return non-closable JavaFX {@link Tab}
+     */
+    public static Tab create(WebInterfaceRuntime runtime, NadiaPluginContext context) {
+        Tab tab = new Tab(tr(context, "settings.web.tab_title", "🌐 Web Interface"));
         tab.setClosable(false);
         try {
-            tab.setContent(buildTabContent(runtime));
+            tab.setContent(buildTabContent(runtime, context));
         } catch (IllegalStateException toolkitNotInitialized) {
             tab.setOnSelectionChanged(ev -> {
                 if (tab.isSelected() && tab.getContent() == null) {
-                    tab.setContent(buildTabContent(runtime));
+                    tab.setContent(buildTabContent(runtime, context));
                 }
             });
         }
         return tab;
     }
 
-    private static BorderPane buildTabContent(WebInterfaceRuntime runtime) {
+    private static String tr(NadiaPluginContext context, String key, String fallback) {
+        if (context == null) {
+            return fallback;
+        }
+        String translated = context.translate(key);
+        return (translated != null && !translated.isBlank() && !translated.equals(key)) ? translated : fallback;
+    }
+
+    private static BorderPane buildTabContent(WebInterfaceRuntime runtime, NadiaPluginContext context) {
         BorderPane outer = new BorderPane();
         outer.setPadding(new Insets(16));
         outer.getStyleClass().add("settings-tab-content");
 
         VBox headerBox = new VBox(4);
-        Label titleLabel = new Label("Browser Web Chat Interface (HTTP / HTTPS)");
+        Label titleLabel = new Label(tr(context, "settings.web.title", "Browser Web Chat Interface (HTTP / HTTPS)"));
         titleLabel.getStyleClass().add("settings-title-label");
-        Label descLabel = new Label(
+        Label descLabel = new Label(tr(context, "settings.web.desc",
                 "Configure Nadia's embedded HTTP & HTTPS web chat server. Access full multi-session chat, "
                 + "@Staff specialist autocomplete, drag-and-drop file attachments, Markdown/Mermaid rendering, "
                 + "RAG vector ingestion, and live Scheduled Tasks streaming over HTTP or TLS-encrypted HTTPS."
-        );
+        ));
         descLabel.getStyleClass().add("settings-info-label");
         descLabel.setWrapText(true);
         headerBox.getChildren().addAll(titleLabel, descLabel);
@@ -97,7 +118,7 @@ public final class WebInterfaceSettingsTab {
         // 1. Live Server Status & Quick Actions Card
         // ---------------------------------------------------------------------
         VBox statusCard = createCard();
-        Label statusHeader = createCardTitle("1. Live Server Status & Quick Actions");
+        Label statusHeader = createCardTitle(tr(context, "settings.web.status_card", "1. Live Server Status & Quick Actions"));
 
         Label statusBadge = new Label();
         statusBadge.setStyle("-fx-font-size: 13px; -fx-font-weight: bold;");
@@ -106,20 +127,20 @@ public final class WebInterfaceSettingsTab {
         urlInfoLabel.getStyleClass().add("settings-info-label");
         urlInfoLabel.setWrapText(true);
 
-        Button startBtn = new Button("▶ Start");
+        Button startBtn = new Button(tr(context, "settings.web.start_btn", "▶ Start"));
         startBtn.getStyleClass().add("settings-btn");
 
-        Button stopBtn = new Button("⏹ Stop");
+        Button stopBtn = new Button(tr(context, "settings.web.stop_btn", "⏹ Stop"));
         stopBtn.getStyleClass().add("settings-btn");
 
-        Button restartBtn = new Button("↻ Restart");
+        Button restartBtn = new Button(tr(context, "settings.web.restart_btn", "↻ Restart"));
         restartBtn.getStyleClass().add("settings-btn");
 
-        Button openBrowserBtn = new Button("🌐 Open in Browser");
+        Button openBrowserBtn = new Button(tr(context, "settings.web.open_browser_btn", "🌐 Open in Browser"));
         openBrowserBtn.getStyleClass().add("chat-send-btn");
         openBrowserBtn.setTooltip(new Tooltip("Launch the Web Chat Interface in your default system browser"));
 
-        Button copyUrlBtn = new Button("📋 Copy URL");
+        Button copyUrlBtn = new Button(tr(context, "settings.web.copy_url_btn", "📋 Copy URL"));
         copyUrlBtn.getStyleClass().add("settings-btn");
         copyUrlBtn.setTooltip(new Tooltip("Copy the active Web Interface URL to clipboard"));
 
@@ -133,23 +154,23 @@ public final class WebInterfaceSettingsTab {
         // 2. Protocol, Network & TLS Certificate Card
         // ---------------------------------------------------------------------
         VBox networkCard = createCard();
-        Label networkHeader = createCardTitle("2. Protocol, Network & TLS Certificate");
+        Label networkHeader = createCardTitle(tr(context, "settings.web.network_card", "2. Protocol, Network & TLS Certificate"));
 
-        CheckBox enabledCheck = new CheckBox("Automatically start Web Interface server when Nadia launches");
+        CheckBox enabledCheck = new CheckBox(tr(context, "settings.web.auto_start", "Automatically start Web Interface server when Nadia launches"));
         enabledCheck.setSelected(initial.enabled());
 
         GridPane netGrid = new GridPane();
         netGrid.setHgap(12);
         netGrid.setVgap(10);
 
-        Label protocolLabel = new Label("Protocol:");
+        Label protocolLabel = new Label(tr(context, "settings.web.protocol", "Protocol:"));
         ComboBox<String> protocolCombo = new ComboBox<>();
         protocolCombo.getItems().addAll(PROTOCOL_HTTP, PROTOCOL_HTTPS);
         protocolCombo.setValue(initial.tlsEnabled() ? PROTOCOL_HTTPS : PROTOCOL_HTTP);
         protocolCombo.setMaxWidth(Double.MAX_VALUE);
         GridPane.setHgrow(protocolCombo, Priority.ALWAYS);
 
-        Label hostLabel = new Label("Bind Address:");
+        Label hostLabel = new Label(tr(context, "settings.web.bind_addr", "Bind Address:"));
         ComboBox<String> hostCombo = new ComboBox<>();
         hostCombo.setEditable(true);
         hostCombo.getItems().addAll(BIND_LOCALHOST, BIND_ALL_INTERFACES);
@@ -158,12 +179,12 @@ public final class WebInterfaceSettingsTab {
                 : ("127.0.0.1".equals(initial.host()) ? BIND_LOCALHOST : initial.host()));
         GridPane.setHgrow(hostCombo, Priority.ALWAYS);
 
-        Label portLabel = new Label("Server Port (1024–65535):");
+        Label portLabel = new Label(tr(context, "settings.web.port", "Server Port (1024–65535):"));
         TextField portField = new TextField(String.valueOf(initial.port()));
         portField.setPromptText("8088");
         portField.setPrefWidth(140);
 
-        Label pageTitleLabel = new Label("Browser Page Title:");
+        Label pageTitleLabel = new Label(tr(context, "settings.web.page_title", "Browser Page Title:"));
         TextField pageTitleField = new TextField(initial.pageTitle());
         pageTitleField.setPromptText(WebInterfaceConfig.DEFAULT_TITLE);
         GridPane.setHgrow(pageTitleField, Priority.ALWAYS);
@@ -182,13 +203,13 @@ public final class WebInterfaceSettingsTab {
         tlsBox.setStyle("-fx-background-color: rgba(59, 130, 246, 0.07); -fx-border-color: -accent-color; "
                 + "-fx-border-radius: 6px; -fx-background-radius: 6px; -fx-padding: 12px;");
 
-        Label tlsSubTitle = new Label("🔐 HTTPS / TLS Certificate Configuration");
+        Label tlsSubTitle = new Label(tr(context, "settings.web.tls_title", "🔐 HTTPS / TLS Certificate Configuration"));
         tlsSubTitle.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: -title-color;");
 
-        Label tlsHint = new Label(
+        Label tlsHint = new Label(tr(context, "settings.web.tls_hint",
                 "Leave 'Custom Keystore Path' blank to automatically generate and use a built-in RSA-2048 "
                 + "self-signed certificate (with localhost & LAN IP SANs), or select your own PKCS#12 (.p12 / .pfx) or JKS (.jks) keystore."
-        );
+        ));
         tlsHint.getStyleClass().add("settings-info-label");
         tlsHint.setWrapText(true);
 
@@ -196,7 +217,7 @@ public final class WebInterfaceSettingsTab {
         keystorePathField.setPromptText("Optional: path to custom .p12 / .pfx / .jks keystore (blank = auto self-signed)");
         HBox.setHgrow(keystorePathField, Priority.ALWAYS);
 
-        Button browseKeystoreBtn = new Button("📂 Browse...");
+        Button browseKeystoreBtn = new Button(tr(context, "settings.web.browse_btn", "📂 Browse..."));
         browseKeystoreBtn.getStyleClass().add("settings-btn");
         browseKeystoreBtn.setOnAction(e -> {
             FileChooser chooser = new FileChooser();
@@ -211,11 +232,11 @@ public final class WebInterfaceSettingsTab {
             }
         });
 
-        Button clearKeystoreBtn = new Button("Clear");
+        Button clearKeystoreBtn = new Button(tr(context, "settings.web.clear_btn", "Clear"));
         clearKeystoreBtn.getStyleClass().add("settings-btn");
         clearKeystoreBtn.setOnAction(e -> keystorePathField.setText(""));
 
-        HBox keystorePathRow = new HBox(8, new Label("Keystore Path:"), keystorePathField, browseKeystoreBtn, clearKeystoreBtn);
+        HBox keystorePathRow = new HBox(8, new Label(tr(context, "settings.web.keystore_path", "Keystore Path:")), keystorePathField, browseKeystoreBtn, clearKeystoreBtn);
         keystorePathRow.setAlignment(Pos.CENTER_LEFT);
 
         PasswordField ksPassMask = new PasswordField();
@@ -230,7 +251,7 @@ public final class WebInterfaceSettingsTab {
         HBox.setHgrow(ksPassPlain, Priority.ALWAYS);
         ksPassPlain.textProperty().bindBidirectional(ksPassMask.textProperty());
 
-        CheckBox showKsPassCheck = new CheckBox("Show");
+        CheckBox showKsPassCheck = new CheckBox(tr(context, "settings.web.show_check", "Show"));
         showKsPassCheck.setOnAction(e -> {
             boolean show = showKsPassCheck.isSelected();
             ksPassPlain.setVisible(show);
@@ -239,11 +260,11 @@ public final class WebInterfaceSettingsTab {
             ksPassMask.setManaged(!show);
         });
 
-        Button regenCertBtn = new Button("🔄 Regenerate Self-Signed Cert");
+        Button regenCertBtn = new Button(tr(context, "settings.web.regen_cert_btn", "🔄 Regenerate Self-Signed Cert"));
         regenCertBtn.getStyleClass().add("settings-btn");
         regenCertBtn.setTooltip(new Tooltip("Generate a fresh RSA-2048 self-signed certificate in ~/.nadia/plugins/data/web-interface/tls/"));
 
-        HBox keystorePassRow = new HBox(8, new Label("Keystore Password:"), ksPassMask, ksPassPlain, showKsPassCheck, regenCertBtn);
+        HBox keystorePassRow = new HBox(8, new Label(tr(context, "settings.web.keystore_pass", "Keystore Password:")), ksPassMask, ksPassPlain, showKsPassCheck, regenCertBtn);
         keystorePassRow.setAlignment(Pos.CENTER_LEFT);
 
         tlsBox.getChildren().addAll(tlsSubTitle, tlsHint, keystorePathRow, keystorePassRow);
@@ -262,27 +283,27 @@ public final class WebInterfaceSettingsTab {
         // 3. Security, File Attachments & Cron Stream Card
         // ---------------------------------------------------------------------
         VBox securityCard = createCard();
-        Label securityHeader = createCardTitle("3. Access Token, Attachments & Live Streams");
+        Label securityHeader = createCardTitle(tr(context, "settings.web.security_card", "3. Access Token, Attachments & Live Streams"));
 
-        Label authDesc = new Label(
+        Label authDesc = new Label(tr(context, "settings.web.auth_desc",
                 "Access Token (Optional — strongly recommended when binding to 0.0.0.0 LAN so remote browsers must authenticate):"
-        );
+        ));
         authDesc.getStyleClass().add("settings-info-label");
         authDesc.setWrapText(true);
 
         PasswordField tokenMaskField = new PasswordField();
         tokenMaskField.setText(initial.authToken());
-        tokenMaskField.setPromptText("Leave blank for passwordless localhost access");
+        tokenMaskField.setPromptText(tr(context, "settings.web.token_prompt", "Leave blank for passwordless localhost access"));
         HBox.setHgrow(tokenMaskField, Priority.ALWAYS);
 
         TextField tokenPlainField = new TextField(initial.authToken());
-        tokenPlainField.setPromptText("Leave blank for passwordless localhost access");
+        tokenPlainField.setPromptText(tr(context, "settings.web.token_prompt", "Leave blank for passwordless localhost access"));
         tokenPlainField.setVisible(false);
         tokenPlainField.setManaged(false);
         HBox.setHgrow(tokenPlainField, Priority.ALWAYS);
         tokenPlainField.textProperty().bindBidirectional(tokenMaskField.textProperty());
 
-        CheckBox showTokenCheck = new CheckBox("Show");
+        CheckBox showTokenCheck = new CheckBox(tr(context, "settings.web.show_check", "Show"));
         showTokenCheck.setOnAction(e -> {
             boolean show = showTokenCheck.isSelected();
             tokenPlainField.setVisible(show);
@@ -291,7 +312,7 @@ public final class WebInterfaceSettingsTab {
             tokenMaskField.setManaged(!show);
         });
 
-        Button generateTokenBtn = new Button("🎲 Generate Token");
+        Button generateTokenBtn = new Button(tr(context, "settings.web.gen_token_btn", "🎲 Generate Token"));
         generateTokenBtn.getStyleClass().add("settings-btn");
         generateTokenBtn.setOnAction(e -> {
             tokenMaskField.setText(WebInterfaceConfig.generateRandomToken());
@@ -302,17 +323,17 @@ public final class WebInterfaceSettingsTab {
             tokenMaskField.setManaged(false);
         });
 
-        Button clearTokenBtn = new Button("Clear");
+        Button clearTokenBtn = new Button(tr(context, "settings.web.clear_btn", "Clear"));
         clearTokenBtn.getStyleClass().add("settings-btn");
         clearTokenBtn.setOnAction(e -> tokenMaskField.setText(""));
 
         HBox tokenRow = new HBox(8, tokenMaskField, tokenPlainField, showTokenCheck, generateTokenBtn, clearTokenBtn);
         tokenRow.setAlignment(Pos.CENTER_LEFT);
 
-        CheckBox allowUploadsCheck = new CheckBox("Allow file attachments & drag-and-drop uploads (📎)");
+        CheckBox allowUploadsCheck = new CheckBox(tr(context, "settings.web.allow_uploads", "Allow file attachments & drag-and-drop uploads (📎)"));
         allowUploadsCheck.setSelected(initial.allowUploads());
 
-        Label maxMbLabel = new Label("Max Upload Size (MB):");
+        Label maxMbLabel = new Label(tr(context, "settings.web.max_upload_mb", "Max Upload Size (MB):"));
         TextField maxMbField = new TextField(String.valueOf(initial.maxUploadMb()));
         maxMbField.setPrefWidth(90);
         maxMbField.disableProperty().bind(allowUploadsCheck.selectedProperty().not());
@@ -320,7 +341,7 @@ public final class WebInterfaceSettingsTab {
         HBox uploadRow = new HBox(12, allowUploadsCheck, maxMbLabel, maxMbField);
         uploadRow.setAlignment(Pos.CENTER_LEFT);
 
-        CheckBox enableCronCheck = new CheckBox("Enable live '🕒 Scheduled Tasks' cron stream tab in browser");
+        CheckBox enableCronCheck = new CheckBox(tr(context, "settings.web.enable_cron", "Enable live '🕒 Scheduled Tasks' cron stream tab in browser"));
         enableCronCheck.setSelected(initial.enableCronStream());
 
         securityCard.getChildren().addAll(securityHeader, authDesc, tokenRow, uploadRow, enableCronCheck);
@@ -332,7 +353,7 @@ public final class WebInterfaceSettingsTab {
         feedbackLabel.getStyleClass().add("settings-info-label");
         feedbackLabel.setWrapText(true);
 
-        Button saveApplyBtn = new Button("💾 Save & Apply Web Interface Settings");
+        Button saveApplyBtn = new Button(tr(context, "settings.web.save_btn", "💾 Save & Apply Web Interface Settings"));
         saveApplyBtn.getStyleClass().add("chat-send-btn");
 
         HBox saveBar = new HBox(12, saveApplyBtn, feedbackLabel);

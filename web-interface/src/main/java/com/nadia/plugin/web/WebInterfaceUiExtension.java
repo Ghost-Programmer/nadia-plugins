@@ -18,7 +18,7 @@ public class WebInterfaceUiExtension implements NadiaUiExtension {
     @Override
     public Optional<Tab> createSettingsTab(NadiaPluginContext context) {
         try {
-            return Optional.of(WebInterfaceSettingsTab.create(WebInterfaceRuntime.getInstance()));
+            return Optional.of(WebInterfaceSettingsTab.create(WebInterfaceRuntime.getInstance(), context));
         } catch (Throwable headlessWithoutJavaFx) {
             // Headless CLI or unit-test environment where JavaFX Toolkit is not initialized
             return Optional.empty();
