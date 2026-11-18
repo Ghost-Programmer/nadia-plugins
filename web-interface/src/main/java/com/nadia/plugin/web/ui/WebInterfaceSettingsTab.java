@@ -23,18 +23,26 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import javafx.stage.FileChooser;
 
+import java.io.File;
+import java.nio.file.Path;
 import java.util.List;
 
 /**
  * JavaFX configuration page contributed to Nadia's {@code SettingsWindowView} under the
  * {@code 🌐 Web Interface} tab.
  *
- * <p>Provides live server status telemetry, one-click Start / Stop / Restart / Open in Browser /
- * Copy URL actions, network host &amp; port binding controls, optional Access Token authentication
- * management, file upload toggles/limits, and Scheduled Cron stream controls.</p>
+ * <p>Provides live HTTP/HTTPS server status telemetry, one-click Start / Stop / Restart /
+ * Open in Browser / Copy URL actions, HTTP vs. HTTPS protocol switching (with automatic
+ * self-signed TLS certificate generation or custom PKCS#12/JKS keystore selection), network
+ * host &amp; port binding controls, optional Access Token authentication management, file upload
+ * toggles/limits, and Scheduled Cron stream controls.</p>
  */
 public final class WebInterfaceSettingsTab {
+
+    private static final String PROTOCOL_HTTP = "HTTP (Standard)";
+    private static final String PROTOCOL_HTTPS = "HTTPS (TLS Encrypted)";
 
     private static final String BIND_LOCALHOST = "127.0.0.1 (Localhost Only — Recommended)";
     private static final String BIND_ALL_INTERFACES = "0.0.0.0 (All Network Interfaces / LAN)";
@@ -55,7 +63,6 @@ public final class WebInterfaceSettingsTab {
         try {
             tab.setContent(buildTabContent(runtime));
         } catch (IllegalStateException toolkitNotInitialized) {
-            // Headless unit test environment without JavaFX Toolkit started; defer UI graph construction
             tab.setOnSelectionChanged(ev -> {
                 if (tab.isSelected() && tab.getContent() == null) {
                     tab.setContent(buildTabContent(runtime));
@@ -71,12 +78,12 @@ public final class WebInterfaceSettingsTab {
         outer.getStyleClass().add("settings-tab-content");
 
         VBox headerBox = new VBox(4);
-        Label titleLabel = new Label("Browser Web Chat Interface");
+        Label titleLabel = new Label("Browser Web Chat Interface (HTTP / HTTPS)");
         titleLabel.getStyleClass().add("settings-title-label");
         Label descLabel = new Label(
-                "Configure Nadia's embedded HTTP & SSE web chat server. Access full multi-session chat, "
+                "Configure Nadia's embedded HTTP & HTTPS web chat server. Access full multi-session chat, "
                 + "@Staff specialist autocomplete, drag-and-drop file attachments, Markdown/Mermaid rendering, "
-                + "RAG vector ingestion, and live Scheduled Tasks streaming from any desktop or mobile browser."
+                + "RAG vector ingestion, and live Scheduled Tasks streaming over HTTP or TLS-encrypted HTTPS."
         );
         descLabel.getStyleClass().add("settings-info-label");
         descLabel.setWrapText(true);
@@ -123,10 +130,10 @@ public final class WebInterfaceSettingsTab {
         statusCard.getChildren().addAll(statusHeader, statusBadge, urlInfoLabel, actionRow);
 
         // ---------------------------------------------------------------------
-        // 2. Network & Binding Configuration Card
+        // 2. Protocol, Network & TLS Certificate Card
         // ---------------------------------------------------------------------
         VBox networkCard = createCard();
-        Label networkHeader = createCardTitle("2. Network & Page Configuration");
+        Label networkHeader = createCardTitle("2. Protocol, Network & TLS Certificate");
 
         CheckBox enabledCheck = new CheckBox("Automatically start Web Interface server when Nadia launches");
         enabledCheck.setSelected(initial.enabled());
@@ -134,6 +141,13 @@ public final class WebInterfaceSettingsTab {
         GridPane netGrid = new GridPane();
         netGrid.setHgap(12);
         netGrid.setVgap(10);
+
+        Label protocolLabel = new Label("Protocol:");
+        ComboBox<String> protocolCombo = new ComboBox<>();
+        protocolCombo.getItems().addAll(PROTOCOL_HTTP, PROTOCOL_HTTPS);
+        protocolCombo.setValue(initial.tlsEnabled() ? PROTOCOL_HTTPS : PROTOCOL_HTTP);
+        protocolCombo.setMaxWidth(Double.MAX_VALUE);
+        GridPane.setHgrow(protocolCombo, Priority.ALWAYS);
 
         Label hostLabel = new Label("Bind Address:");
         ComboBox<String> hostCombo = new ComboBox<>();
@@ -144,7 +158,7 @@ public final class WebInterfaceSettingsTab {
                 : ("127.0.0.1".equals(initial.host()) ? BIND_LOCALHOST : initial.host()));
         GridPane.setHgrow(hostCombo, Priority.ALWAYS);
 
-        Label portLabel = new Label("HTTP Port (1024–65535):");
+        Label portLabel = new Label("Server Port (1024–65535):");
         TextField portField = new TextField(String.valueOf(initial.port()));
         portField.setPromptText("8088");
         portField.setPrefWidth(140);
@@ -154,20 +168,101 @@ public final class WebInterfaceSettingsTab {
         pageTitleField.setPromptText(WebInterfaceConfig.DEFAULT_TITLE);
         GridPane.setHgrow(pageTitleField, Priority.ALWAYS);
 
-        netGrid.add(hostLabel, 0, 0);
-        netGrid.add(hostCombo, 1, 0);
-        netGrid.add(portLabel, 0, 1);
-        netGrid.add(portField, 1, 1);
-        netGrid.add(pageTitleLabel, 0, 2);
-        netGrid.add(pageTitleField, 1, 2);
+        netGrid.add(protocolLabel, 0, 0);
+        netGrid.add(protocolCombo, 1, 0);
+        netGrid.add(hostLabel, 0, 1);
+        netGrid.add(hostCombo, 1, 1);
+        netGrid.add(portLabel, 0, 2);
+        netGrid.add(portField, 1, 2);
+        netGrid.add(pageTitleLabel, 0, 3);
+        netGrid.add(pageTitleField, 1, 3);
 
-        networkCard.getChildren().addAll(networkHeader, enabledCheck, netGrid);
+        // Collapsible TLS / HTTPS Certificate Settings sub-panel
+        VBox tlsBox = new VBox(8);
+        tlsBox.setStyle("-fx-background-color: rgba(59, 130, 246, 0.07); -fx-border-color: -accent-color; "
+                + "-fx-border-radius: 6px; -fx-background-radius: 6px; -fx-padding: 12px;");
+
+        Label tlsSubTitle = new Label("🔐 HTTPS / TLS Certificate Configuration");
+        tlsSubTitle.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: -title-color;");
+
+        Label tlsHint = new Label(
+                "Leave 'Custom Keystore Path' blank to automatically generate and use a built-in RSA-2048 "
+                + "self-signed certificate (with localhost & LAN IP SANs), or select your own PKCS#12 (.p12 / .pfx) or JKS (.jks) keystore."
+        );
+        tlsHint.getStyleClass().add("settings-info-label");
+        tlsHint.setWrapText(true);
+
+        TextField keystorePathField = new TextField(initial.keystorePath());
+        keystorePathField.setPromptText("Optional: path to custom .p12 / .pfx / .jks keystore (blank = auto self-signed)");
+        HBox.setHgrow(keystorePathField, Priority.ALWAYS);
+
+        Button browseKeystoreBtn = new Button("📂 Browse...");
+        browseKeystoreBtn.getStyleClass().add("settings-btn");
+        browseKeystoreBtn.setOnAction(e -> {
+            FileChooser chooser = new FileChooser();
+            chooser.setTitle("Select PKCS#12 or JKS Keystore");
+            chooser.getExtensionFilters().addAll(
+                    new FileChooser.ExtensionFilter("TLS Keystores (*.p12, *.pfx, *.jks)", "*.p12", "*.pfx", "*.jks"),
+                    new FileChooser.ExtensionFilter("All Files (*.*)", "*.*")
+            );
+            File selected = chooser.showOpenDialog(outer.getScene() != null ? outer.getScene().getWindow() : null);
+            if (selected != null) {
+                keystorePathField.setText(selected.getAbsolutePath());
+            }
+        });
+
+        Button clearKeystoreBtn = new Button("Clear");
+        clearKeystoreBtn.getStyleClass().add("settings-btn");
+        clearKeystoreBtn.setOnAction(e -> keystorePathField.setText(""));
+
+        HBox keystorePathRow = new HBox(8, new Label("Keystore Path:"), keystorePathField, browseKeystoreBtn, clearKeystoreBtn);
+        keystorePathRow.setAlignment(Pos.CENTER_LEFT);
+
+        PasswordField ksPassMask = new PasswordField();
+        ksPassMask.setText(initial.keystorePassword());
+        ksPassMask.setPromptText("Custom keystore password (if using custom keystore)");
+        HBox.setHgrow(ksPassMask, Priority.ALWAYS);
+
+        TextField ksPassPlain = new TextField(initial.keystorePassword());
+        ksPassPlain.setPromptText("Custom keystore password (if using custom keystore)");
+        ksPassPlain.setVisible(false);
+        ksPassPlain.setManaged(false);
+        HBox.setHgrow(ksPassPlain, Priority.ALWAYS);
+        ksPassPlain.textProperty().bindBidirectional(ksPassMask.textProperty());
+
+        CheckBox showKsPassCheck = new CheckBox("Show");
+        showKsPassCheck.setOnAction(e -> {
+            boolean show = showKsPassCheck.isSelected();
+            ksPassPlain.setVisible(show);
+            ksPassPlain.setManaged(show);
+            ksPassMask.setVisible(!show);
+            ksPassMask.setManaged(!show);
+        });
+
+        Button regenCertBtn = new Button("🔄 Regenerate Self-Signed Cert");
+        regenCertBtn.getStyleClass().add("settings-btn");
+        regenCertBtn.setTooltip(new Tooltip("Generate a fresh RSA-2048 self-signed certificate in ~/.nadia/plugins/data/web-interface/tls/"));
+
+        HBox keystorePassRow = new HBox(8, new Label("Keystore Password:"), ksPassMask, ksPassPlain, showKsPassCheck, regenCertBtn);
+        keystorePassRow.setAlignment(Pos.CENTER_LEFT);
+
+        tlsBox.getChildren().addAll(tlsSubTitle, tlsHint, keystorePathRow, keystorePassRow);
+
+        Runnable updateTlsVisibility = () -> {
+            boolean httpsSelected = PROTOCOL_HTTPS.equals(protocolCombo.getValue());
+            tlsBox.setVisible(httpsSelected);
+            tlsBox.setManaged(httpsSelected);
+        };
+        protocolCombo.setOnAction(e -> updateTlsVisibility.run());
+        updateTlsVisibility.run();
+
+        networkCard.getChildren().addAll(networkHeader, enabledCheck, netGrid, tlsBox);
 
         // ---------------------------------------------------------------------
         // 3. Security, File Attachments & Cron Stream Card
         // ---------------------------------------------------------------------
         VBox securityCard = createCard();
-        Label securityHeader = createCardTitle("3. Security, Attachments & Live Streams");
+        Label securityHeader = createCardTitle("3. Access Token, Attachments & Live Streams");
 
         Label authDesc = new Label(
                 "Access Token (Optional — strongly recommended when binding to 0.0.0.0 LAN so remote browsers must authenticate):"
@@ -262,18 +357,25 @@ public final class WebInterfaceSettingsTab {
             stopBtn.setDisable(!running);
 
             if (running) {
+                WebInterfaceConfig activeCfg = srv.getActiveConfig();
                 String primaryUrl = srv.getPrimaryUrl();
                 int clients = srv.getConnectedClientCount();
-                statusBadge.setText("● Running on " + primaryUrl + "  (" + clients + " browser tab" + (clients == 1 ? "" : "s") + " connected)");
+                String protoBadge = activeCfg.tlsEnabled() ? "HTTPS/TLS" : "HTTP";
+                statusBadge.setText("● Running (" + protoBadge + ") on " + primaryUrl
+                        + "  (" + clients + " browser tab" + (clients == 1 ? "" : "s") + " connected)");
                 statusBadge.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #2ecc71;");
 
+                String tlsSummary = !activeCfg.tlsEnabled()
+                        ? "Plain HTTP"
+                        : (activeCfg.hasCustomKeystore() ? "🔐 Custom Keystore TLS" : "🔐 Auto Self-Signed TLS");
                 List<String> lanUrls = srv.getLanUrls();
                 if (!lanUrls.isEmpty()) {
                     urlInfoLabel.setText("LAN Access URLs: " + String.join("  |  ", lanUrls)
-                            + (cfg.isAuthRequired() ? "  (🔒 Token Protected)" : "  (⚠ Unprotected — consider setting an Access Token)"));
+                            + "  ·  " + tlsSummary
+                            + (activeCfg.isAuthRequired() ? "  ·  🔒 Token Protected" : "  ·  ⚠ No Access Token Set"));
                 } else {
-                    urlInfoLabel.setText("Bound to Localhost (" + cfg.host() + ")"
-                            + (cfg.isAuthRequired() ? " · 🔒 Access Token Active" : " · Localhost Open Access"));
+                    urlInfoLabel.setText("Bound to Localhost (" + activeCfg.host() + ")  ·  " + tlsSummary
+                            + (activeCfg.isAuthRequired() ? "  ·  🔒 Access Token Active" : "  ·  Localhost Open Access"));
                 }
             } else {
                 String err = (srv != null) ? srv.getLastErrorMessage() : "";
@@ -281,7 +383,7 @@ public final class WebInterfaceSettingsTab {
                     statusBadge.setText("⚠ Server Error: " + err);
                     statusBadge.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #e74c3c;");
                 } else {
-                    statusBadge.setText("○ Stopped (Configured for http://" + cfg.host() + ":" + cfg.port() + ")");
+                    statusBadge.setText("○ Stopped (Configured for " + cfg.scheme() + "://" + cfg.host() + ":" + cfg.port() + ")");
                     statusBadge.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #95a5a6;");
                 }
                 urlInfoLabel.setText("Click '▶ Start' or enable startup binding below to accept browser connections.");
@@ -297,9 +399,19 @@ public final class WebInterfaceSettingsTab {
         });
         refreshStatusUi.run();
 
+        regenCertBtn.setOnAction(e -> {
+            try {
+                Path certPath = runtime.regenerateSelfSignedCertificate();
+                feedbackLabel.setText("🔐 Regenerated self-signed TLS keystore: " + certPath.getFileName());
+            } catch (Exception ex) {
+                feedbackLabel.setText("⚠ Failed regenerating certificate: " + ex.getMessage());
+            }
+            refreshStatusUi.run();
+        });
+
         startBtn.setOnAction(e -> {
             boolean ok = runtime.startServerNow();
-            feedbackLabel.setText(ok ? "Web Interface server started." : "Failed to start server—check port availability.");
+            feedbackLabel.setText(ok ? "Web Interface server started." : "Failed to start server—check port or keystore settings.");
             refreshStatusUi.run();
         });
 
@@ -318,7 +430,7 @@ public final class WebInterfaceSettingsTab {
         copyUrlBtn.setOnAction(e -> {
             WebInterfaceServer srv = runtime.getServer();
             WebInterfaceConfig cfg = runtime.loadCurrentConfig();
-            String url = srv != null ? srv.getPrimaryUrl() : ("http://127.0.0.1:" + cfg.port());
+            String url = srv != null ? srv.getPrimaryUrl() : (cfg.scheme() + "://127.0.0.1:" + cfg.port());
             ClipboardContent cc = new ClipboardContent();
             cc.putString(url);
             Clipboard.getSystemClipboard().setContent(cc);
@@ -331,7 +443,8 @@ public final class WebInterfaceSettingsTab {
                 runtime.startServerNow();
                 srv = runtime.getServer();
             }
-            String url = srv != null ? srv.getPrimaryUrl() : ("http://127.0.0.1:" + runtime.loadCurrentConfig().port());
+            WebInterfaceConfig cfg = runtime.loadCurrentConfig();
+            String url = srv != null ? srv.getPrimaryUrl() : (cfg.scheme() + "://127.0.0.1:" + cfg.port());
             openUrlInSystemBrowser(url);
             feedbackLabel.setText("Opened " + url + " in system browser.");
             refreshStatusUi.run();
@@ -362,11 +475,15 @@ public final class WebInterfaceSettingsTab {
                     ? hostCombo.getEditor().getText().trim()
                     : hostCombo.getValue();
             String resolvedHost = parseHostSelection(rawHostSelection);
+            boolean useHttps = PROTOCOL_HTTPS.equals(protocolCombo.getValue());
 
             WebInterfaceConfig updated = new WebInterfaceConfig(
                     enabledCheck.isSelected(),
+                    useHttps,
                     resolvedHost,
                     parsedPort,
+                    keystorePathField.getText(),
+                    ksPassMask.getText(),
                     tokenMaskField.getText(),
                     pageTitleField.getText(),
                     allowUploadsCheck.isSelected(),
@@ -376,9 +493,11 @@ public final class WebInterfaceSettingsTab {
 
             boolean ok = runtime.saveAndApplyConfig(updated);
             if (ok) {
-                feedbackLabel.setText("✅ Saved Web Interface settings to nadia.properties and applied live.");
+                feedbackLabel.setText("✅ Saved " + updated.scheme().toUpperCase() + " settings to nadia.properties and applied live.");
             } else {
-                feedbackLabel.setText("⚠ Settings saved, but port " + parsedPort + " could not be bound.");
+                WebInterfaceServer srv = runtime.getServer();
+                String reason = (srv != null && !srv.getLastErrorMessage().isBlank()) ? srv.getLastErrorMessage() : ("port " + parsedPort);
+                feedbackLabel.setText("⚠ Settings saved, but server failed to bind: " + reason);
             }
             refreshStatusUi.run();
         });

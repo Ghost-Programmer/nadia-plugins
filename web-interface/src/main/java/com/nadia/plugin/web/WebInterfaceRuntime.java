@@ -140,13 +140,36 @@ public final class WebInterfaceRuntime {
     }
 
     /**
-     * Stops the HTTP server immediately without altering persisted startup preferences.
+     * Stops the HTTP/HTTPS server immediately without altering persisted startup preferences.
      */
     public synchronized void stopServerNow() {
         if (server != null) {
             server.stop();
             notifyStatusListeners();
         }
+    }
+
+    /**
+     * Regenerates the built-in self-signed PKCS#12 HTTPS keystore inside the plugin's data directory,
+     * and restarts the listener if HTTPS self-signed mode is currently running.
+     *
+     * @return path to the newly generated {@code .p12} keystore
+     * @throws IOException if certificate generation fails or plugin context is uninitialized
+     */
+    public synchronized Path regenerateSelfSignedCertificate() throws IOException {
+        if (pluginContext == null) {
+            throw new IOException("Plugin context is not initialized.");
+        }
+        Path dataDir = pluginContext.getPluginDataDir(PLUGIN_ID);
+        Path generated = com.nadia.plugin.web.server.TlsKeystoreManager.ensureSelfSignedKeystore(dataDir, true);
+        if (server != null && server.isRunning()) {
+            WebInterfaceConfig cfg = loadCurrentConfig();
+            if (cfg.tlsEnabled() && !cfg.hasCustomKeystore()) {
+                server.start(cfg);
+            }
+        }
+        notifyStatusListeners();
+        return generated;
     }
 
     /**

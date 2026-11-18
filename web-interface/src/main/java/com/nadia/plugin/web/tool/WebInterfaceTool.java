@@ -36,10 +36,12 @@ public class WebInterfaceTool implements NadiaToolExtension {
         Map<String, Object> result = new LinkedHashMap<>();
         boolean running = server != null && server.isRunning();
         result.put("running", running);
+        result.put("protocol", cfg.scheme());
+        result.put("tlsMode", !cfg.tlsEnabled() ? "none" : (cfg.hasCustomKeystore() ? "custom-keystore" : "auto-self-signed"));
         result.put("enabledOnStartup", cfg.enabled());
         result.put("host", cfg.host());
         result.put("port", running ? server.getActualBoundPort() : cfg.port());
-        result.put("url", server != null ? server.getPrimaryUrl() : ("http://127.0.0.1:" + cfg.port()));
+        result.put("url", server != null ? server.getPrimaryUrl() : (cfg.scheme() + "://127.0.0.1:" + cfg.port()));
         result.put("lanUrls", server != null ? server.getLanUrls() : java.util.List.of());
         result.put("authRequired", cfg.isAuthRequired());
         result.put("allowUploads", cfg.allowUploads());

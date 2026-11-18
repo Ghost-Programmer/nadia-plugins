@@ -264,5 +264,75 @@ public class WebInterfacePluginTest {
         plugin.stop();
         assertNull(WebInterfaceRuntime.getInstance().getServer());
     }
+
+    @Test
+    public void testHttpsModeAutoGeneratesSelfSignedCertificateAndSwitchesProtocolLive(@TempDir Path tempDir) throws Exception {
+        Map<String, String> props = new HashMap<>();
+        props.put(WebInterfaceConfig.PROP_ENABLED, "true");
+        props.put(WebInterfaceConfig.PROP_PROTOCOL, "https");
+        props.put(WebInterfaceConfig.PROP_HOST, "127.0.0.1");
+        props.put(WebInterfaceConfig.PROP_PORT, "0"); // Ephemeral port
+
+        NadiaPluginContext ctx = mock(NadiaPluginContext.class);
+        when(ctx.getPluginDataDir("web-interface")).thenReturn(tempDir);
+        doAnswer(inv -> {
+            props.put(inv.getArgument(0), inv.getArgument(1));
+            return null;
+        }).when(ctx).setProperty(anyString(), anyString());
+        when(ctx.getProperty(anyString(), anyString())).thenAnswer(inv ->
+                props.getOrDefault(inv.getArgument(0), inv.getArgument(1)));
+        when(ctx.registerScheduledJobListener(any())).thenReturn(() -> {});
+
+        PluginWrapper wrapper = mock(PluginWrapper.class);
+        when(wrapper.getPluginId()).thenReturn("web-interface");
+
+        WebInterfacePlugin plugin = new WebInterfacePlugin(wrapper);
+        plugin.setPluginContext(ctx);
+        plugin.start();
+
+        WebInterfaceServer server = WebInterfaceRuntime.getInstance().getServer();
+        assertNotNull(server);
+        assertTrue(server.isRunning());
+        String httpsUrl = server.getPrimaryUrl();
+        assertTrue(httpsUrl.startsWith("https://127.0.0.1:"), "Expected https:// URL but got: " + httpsUrl);
+
+        // Build an HttpClient trusting the generated self-signed keystore
+        javax.net.ssl.SSLContext clientSsl = com.nadia.plugin.web.server.TlsKeystoreManager.buildSslContext(
+                server.getActiveConfig(), tempDir
+        );
+        HttpClient httpsClient = HttpClient.newBuilder()
+                .sslContext(clientSsl)
+                .build();
+
+        HttpResponse<String> cfgResp = httpsClient.send(
+                HttpRequest.newBuilder(URI.create(httpsUrl + "/api/config")).GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+        );
+        assertEquals(200, cfgResp.statusCode());
+        JsonNode cfgJson = mapper.readTree(cfgResp.body());
+        assertEquals("https", cfgJson.get("protocol").asText());
+
+        // Verify tool reports protocol="https" and tlsMode="auto-self-signed"
+        JsonNode statusJson = mapper.readTree(new WebInterfaceTool().getWebInterfaceStatus());
+        assertEquals("https", statusJson.get("protocol").asText());
+        assertEquals("auto-self-signed", statusJson.get("tlsMode").asText());
+
+        // Switch live from HTTPS back to HTTP and verify plain HTTP serves cleanly
+        WebInterfaceConfig httpCfg = new WebInterfaceConfig(
+                true, false, "127.0.0.1", 0, "", "", "", "Nadia HTTP", true, 25, true
+        );
+        assertTrue(WebInterfaceRuntime.getInstance().saveAndApplyConfig(httpCfg));
+        String httpUrl = server.getPrimaryUrl();
+        assertTrue(httpUrl.startsWith("http://127.0.0.1:"));
+
+        HttpResponse<String> plainResp = HttpClient.newHttpClient().send(
+                HttpRequest.newBuilder(URI.create(httpUrl + "/api/config")).GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+        );
+        assertEquals(200, plainResp.statusCode());
+        assertEquals("http", mapper.readTree(plainResp.body()).get("protocol").asText());
+
+        plugin.stop();
+    }
 }
 

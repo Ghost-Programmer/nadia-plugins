@@ -9,8 +9,14 @@ import com.nadia.plugin.web.config.WebInterfaceConfig;
 import com.nadia.plugin.web.service.WebChatSessionStore;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpsConfigurator;
+import com.sun.net.httpserver.HttpsParameters;
+import com.sun.net.httpserver.HttpsServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -158,7 +164,23 @@ public class WebInterfaceServer {
         try {
             Files.createDirectories(uploadsDir);
             InetSocketAddress bindAddr = new InetSocketAddress(activeConfig.host(), activeConfig.port());
-            HttpServer srv = HttpServer.create(bindAddr, 0);
+            HttpServer srv;
+            if (activeConfig.tlsEnabled()) {
+                Path dataDir = webAssetsDir.getParent() != null ? webAssetsDir.getParent() : webAssetsDir;
+                SSLContext sslContext = TlsKeystoreManager.buildSslContext(activeConfig, dataDir);
+                HttpsServer httpsSrv = HttpsServer.create(bindAddr, 0);
+                httpsSrv.setHttpsConfigurator(new HttpsConfigurator(sslContext) {
+                    @Override
+                    public void configure(HttpsParameters params) {
+                        SSLParameters sslParams = getSSLContext().getDefaultSSLParameters();
+                        sslParams.setProtocols(new String[]{"TLSv1.3", "TLSv1.2"});
+                        params.setSSLParameters(sslParams);
+                    }
+                });
+                srv = httpsSrv;
+            } else {
+                srv = HttpServer.create(bindAddr, 0);
+            }
             ExecutorService vte = Executors.newVirtualThreadPerTaskExecutor();
             srv.setExecutor(vte);
 
@@ -183,12 +205,13 @@ public class WebInterfaceServer {
             hb.scheduleAtFixedRate(this::pruneAndHeartbeatClients, 20, 20, TimeUnit.SECONDS);
             this.heartbeatScheduler = hb;
 
-            logger.info("[WebInterface] HTTP chat interface listening at {}", getPrimaryUrl());
+            logger.info("[WebInterface] {} chat interface listening at {}",
+                    activeConfig.scheme().toUpperCase(), getPrimaryUrl());
             return true;
         } catch (Exception e) {
             this.lastErrorMessage = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-            logger.error("[WebInterface] Failed to bind HTTP server on {}:{}: {}",
-                    activeConfig.host(), activeConfig.port(), lastErrorMessage, e);
+            logger.error("[WebInterface] Failed to bind {} server on {}:{}: {}",
+                    activeConfig.scheme().toUpperCase(), activeConfig.host(), activeConfig.port(), lastErrorMessage, e);
             stop();
             return false;
         }
@@ -238,9 +261,7 @@ public class WebInterfaceServer {
             return true;
         }
 
-        boolean needsRebind = !isRunning()
-                || !previous.host().equals(this.activeConfig.host())
-                || previous.port() != this.activeConfig.port();
+        boolean needsRebind = !isRunning() || this.activeConfig.requiresListenerRebind(previous);
 
         if (needsRebind) {
             return start(this.activeConfig);
@@ -248,6 +269,7 @@ public class WebInterfaceServer {
 
         broadcastEvent("config_updated", Map.of(
                 "title", this.activeConfig.pageTitle(),
+                "protocol", this.activeConfig.scheme(),
                 "allowUploads", this.activeConfig.allowUploads(),
                 "maxUploadMb", this.activeConfig.maxUploadMb(),
                 "enableCronStream", this.activeConfig.enableCronStream()
@@ -308,7 +330,7 @@ public class WebInterfaceServer {
     public String getPrimaryUrl() {
         int port = actualBoundPort > 0 ? actualBoundPort : activeConfig.port();
         String host = "0.0.0.0".equals(activeConfig.host()) ? "127.0.0.1" : activeConfig.host();
-        return "http://" + host + ":" + port;
+        return activeConfig.scheme() + "://" + host + ":" + port;
     }
 
     /**
@@ -321,6 +343,7 @@ public class WebInterfaceServer {
         if (!"0.0.0.0".equals(activeConfig.host())) {
             return List.of();
         }
+        String scheme = activeConfig.scheme();
         List<String> urls = new ArrayList<>();
         try {
             Enumeration<NetworkInterface> nets = NetworkInterface.getNetworkInterfaces();
@@ -333,7 +356,7 @@ public class WebInterfaceServer {
                 while (addrs.hasMoreElements()) {
                     InetAddress addr = addrs.nextElement();
                     if (!addr.isLoopbackAddress() && addr.getAddress().length == 4) {
-                        urls.add("http://" + addr.getHostAddress() + ":" + port);
+                        urls.add(scheme + "://" + addr.getHostAddress() + ":" + port);
                     }
                 }
             }
@@ -429,6 +452,7 @@ public class WebInterfaceServer {
         boolean authed = isAuthorized(exchange);
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("title", cfg.pageTitle());
+        resp.put("protocol", cfg.scheme());
         resp.put("authRequired", cfg.isAuthRequired());
         resp.put("authenticated", authed);
         resp.put("allowUploads", cfg.allowUploads());
