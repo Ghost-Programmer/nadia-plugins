@@ -28,7 +28,12 @@ Plugins in this repository can extend Nadia at runtime with new **AI agent tools
 | Subproject | Plugin ID | Description |
 | :--- | :--- | :--- |
 | [`world-map-viewer`](./world-map-viewer) | `world-map-viewer` | Interactive Leaflet.js World Map Viewer (`MapWindowView`) with GIS plotting tools (`MapTool`), live OpenSky Network flight tracking (`AviationTool`), FAA Civil Aviation Registry lookup (`FaaRegistryService`), N2YO orbital satellite tracking (`SatelliteTool`), and live USGS earthquake tracking with 1–7 day lookback (`EarthquakeTool`). |
-| [`web-interface`](./web-interface) | `web-interface` | Browser-accessible Web Chat Interface (`WebInterfaceServer`) with multi-session chat, `@Staff` autocomplete, drag-and-drop file attachments, Markdown/Mermaid rendering, `🧠 Send to RAG` ingestion, live Scheduled Tasks cron streaming, and a dedicated `🌐 Web Interface` Settings tab (`WebInterfaceSettingsTab`). |
+| [`web-interface`](./web-interface) | `web-interface` | Browser-accessible Web Chat Interface (`WebInterfaceServer`) with HTTP/HTTPS TLS support, multi-session chat, `@Staff` autocomplete, drag-and-drop file attachments, Markdown/Mermaid rendering, `🧠 Send to RAG` ingestion, live Scheduled Tasks cron streaming, and a dedicated `🌐 Web Interface` Settings tab (`WebInterfaceSettingsTab`). |
+| [`lang-en-us`](./lang-en-us) | `lang-en-us` | 🇺🇸 **English (US)** [`en-US`] UI & AI language pack plugin (`NadiaLanguageExtension`). |
+| [`lang-en-gb`](./lang-en-gb) | `lang-en-gb` | 🇬🇧 **English (UK)** [`en-GB`] British English UI & AI language pack plugin (*Colour*, *Localisation*, *Customise*, *Authorise*, *Control Centre*). |
+| [`lang-es`](./lang-es) | `lang-es` | 🇪🇸 **Español (Spanish)** [`es`] UI & AI language pack plugin (`NadiaLanguageExtension`). |
+| [`lang-de`](./lang-de) | `lang-de` | 🇩🇪 **Deutsch (German)** [`de`] UI & AI language pack plugin (`NadiaLanguageExtension`). |
+| [`lang-fr`](./lang-fr) | `lang-fr` | 🇫🇷 **Français (French)** [`fr`] UI & AI language pack plugin (`NadiaLanguageExtension`). |
 
 ---
 

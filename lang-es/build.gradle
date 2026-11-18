@@ -1,0 +1,16 @@
+description = 'Spanish / Español [es] UI and AI Language Pack PF4J plugin for Nadia.'
+
+tasks.named('jar') {
+    archiveBaseName = 'lang-es'
+    manifest {
+        attributes(
+            'Plugin-Id': 'lang-es',
+            'Plugin-Version': project.version.toString(),
+            'Plugin-Provider': 'Miller Software Solutions LLC',
+            'Plugin-Description': project.description,
+            'Plugin-License': 'Apache-2.0',
+            'Plugin-Class': 'com.nadia.plugin.lang.es.SpanishLanguagePlugin'
+        )
+    }
+}
+

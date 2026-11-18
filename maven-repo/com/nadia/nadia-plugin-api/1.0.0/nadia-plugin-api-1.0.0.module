@@ -130,11 +130,11 @@
         {
           "name": "nadia-plugin-api-1.0.0.jar",
           "url": "nadia-plugin-api-1.0.0.jar",
-          "size": 14276,
-          "sha512": "cda4a44dbdc90b9814deeef427713e3aeae4d73ed66726e26f05b92d3c0fdad547f7e1b95a1ce6f30190a74ab8ec23dabd83eafd4e2935432470811e2f0f2839",
-          "sha256": "5f4bf4cc0baaacc20d75b22fdff510049d10a3a7345429ce7e3bb2607f00cc5b",
-          "sha1": "f70935a534e8ba4cef443f15169a8938b8e3d5f7",
-          "md5": "e4595fe50d30bffb0f8ea30659806ea7"
+          "size": 18181,
+          "sha512": "59d99c1b6e419fab8001e6efb6ccd4ea24d5ec3cd2d34ecfe704703f941b4bff8a3e46d3444ba32b77ba4668ca4dde12aef8a39596d292ea7d5667cdde933dce",
+          "sha256": "d09cd328f342ae782aef0b64a2f18cad41397c698c2d64fe9c36241df6f1d19f",
+          "sha1": "8c6bc517dea8bb78088280bcd366c1809bd47779",
+          "md5": "59b511c034c346cc668b223eee87fa74"
         }
       ]
     },
@@ -329,11 +329,11 @@
         {
           "name": "nadia-plugin-api-1.0.0.jar",
           "url": "nadia-plugin-api-1.0.0.jar",
-          "size": 14276,
-          "sha512": "cda4a44dbdc90b9814deeef427713e3aeae4d73ed66726e26f05b92d3c0fdad547f7e1b95a1ce6f30190a74ab8ec23dabd83eafd4e2935432470811e2f0f2839",
-          "sha256": "5f4bf4cc0baaacc20d75b22fdff510049d10a3a7345429ce7e3bb2607f00cc5b",
-          "sha1": "f70935a534e8ba4cef443f15169a8938b8e3d5f7",
-          "md5": "e4595fe50d30bffb0f8ea30659806ea7"
+          "size": 18181,
+          "sha512": "59d99c1b6e419fab8001e6efb6ccd4ea24d5ec3cd2d34ecfe704703f941b4bff8a3e46d3444ba32b77ba4668ca4dde12aef8a39596d292ea7d5667cdde933dce",
+          "sha256": "d09cd328f342ae782aef0b64a2f18cad41397c698c2d64fe9c36241df6f1d19f",
+          "sha1": "8c6bc517dea8bb78088280bcd366c1809bd47779",
+          "md5": "59b511c034c346cc668b223eee87fa74"
         }
       ]
     },
@@ -349,11 +349,11 @@
         {
           "name": "nadia-plugin-api-1.0.0-sources.jar",
           "url": "nadia-plugin-api-1.0.0-sources.jar",
-          "size": 13444,
-          "sha512": "1ba2044640fb06d642e9b9ea6346c448d2187e878c387a3b11d81fb2f56a5abfa8a17551afdf948f9b03443fdb276fe254c99f9c555be4c4a93cc86d0e77be99",
-          "sha256": "b306149ccbac7d197c1bea0a0849d58c0da58fbab23baf84185a4568e3d03ea9",
-          "sha1": "af2eb53189264348b991281b16a4c22f465b6c59",
-          "md5": "e117f9e349420cdf6ffc843503aed844"
+          "size": 16313,
+          "sha512": "aff4c5dfe5ecf931c350c9c5eee97a65f4db13282b2bd112d9f1096dafc83b57d09227fc863067088622f4a65505016f0aede8a0d5445302ddcf2948868dcf58",
+          "sha256": "62f6e114d8de2f465d3687090a7ac5c48a42c598010c774bd7d37d1fada3be61",
+          "sha1": "910fc5927fe18cc8f61abe1097aace8660406e50",
+          "md5": "f97d0f26dea38c87559314b0cf4b7923"
         }
       ]
     },
@@ -369,11 +369,11 @@
         {
           "name": "nadia-plugin-api-1.0.0-javadoc.jar",
           "url": "nadia-plugin-api-1.0.0-javadoc.jar",
-          "size": 4210784,
-          "sha512": "fc79477dfdfe7eed4ca97be03b8caf6d93f3a1a0487cf7f8176ab613fb3efe8d4b43266c0990a3242bcbd3e4550bff1dc6b7d2bac8e1b22ebc83006d63c82019",
-          "sha256": "5c5bfc9b655abce27b57ee94e2b5318fb80bfbc2fd8f4df1b23c281af1a4149f",
-          "sha1": "0e1450bda1bd9b604b685d03b80d9dd5af4fa06c",
-          "md5": "db4548e283d795dd4192e3d531070552"
+          "size": 4220145,
+          "sha512": "bee2e93371ca6b35b44b543325d828725fa36267eed44cafd565cdc5122beba88d9629ae590ea60b7243af97dada58c127862267c4eedae09d80357ac4f4a1dc",
+          "sha256": "33ec7257314e020858c7ec5544604d9fb3a31224ddb3c0b36d47f921fc0cf9a4",
+          "sha1": "70b7d2d2ecbcb2453331ce352a2ed7bb5fe31244",
+          "md5": "6f96b6f4793ff73b5110042e71afccee"
         }
       ]
     }

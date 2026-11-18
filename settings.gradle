@@ -6,3 +6,8 @@ rootProject.name = 'nadia-plugins'
 
 include 'world-map-viewer'
 include 'web-interface'
+include 'lang-en-us'
+include 'lang-en-gb'
+include 'lang-es'
+include 'lang-de'
+include 'lang-fr'
