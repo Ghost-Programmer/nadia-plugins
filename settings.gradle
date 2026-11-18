@@ -5,3 +5,4 @@ plugins {
 rootProject.name = 'nadia-plugins'
 
 include 'world-map-viewer'
+include 'web-interface'

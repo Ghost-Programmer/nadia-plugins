@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nadia AI Assistant</title>
+    <link rel="stylesheet" href="/app.css" />
+    <!-- Optional progressive enhancement libraries (Marked, Highlight.js, Mermaid); full offline fallback built into app.js -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" crossorigin="anonymous" />
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js" crossorigin="anonymous"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js" crossorigin="anonymous"></script>
+    <script defer src="/app.js"></script>
+</head>
+<body>
+    <!-- Drag & Drop Overlay -->
+    <div id="drop-overlay" class="drop-overlay hidden">
+        <div class="drop-overlay-box">
+            <div class="drop-icon">📎</div>
+            <div class="drop-title">Drop files to attach to your message</div>
+            <div class="drop-subtitle">Documents, code, Markdown, PDFs, GEDCOM, images &amp; data files</div>
+        </div>
+    </div>
+
+    <!-- Optional Access Token Lock Modal -->
+    <div id="auth-overlay" class="modal-backdrop hidden">
+        <div class="auth-card">
+            <div class="auth-logo">🤖</div>
+            <h2 id="auth-title">Nadia Web Interface</h2>
+            <p class="auth-subtitle">Enter the Access Token configured in <strong>System Settings ➔ Web Interface</strong> to continue.</p>
+            <form id="auth-form">
+                <input id="auth-token-input" type="password" class="auth-input" placeholder="Access Token" autocomplete="current-password" required />
+                <div id="auth-error" class="auth-error hidden">Invalid access token. Please try again.</div>
+                <button type="submit" class="primary-btn full-width">🔓 Unlock Chat</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Application Shell -->
+    <div class="app-shell">
+        <!-- Top Header Bar -->
+        <header class="top-header">
+            <div class="brand-group">
+                <span class="brand-icon">🤖</span>
+                <h1 id="page-title" class="brand-title">Nadia AI Assistant</h1>
+                <span id="conn-pill" class="conn-pill connecting" title="Real-time SSE stream status">● Connecting...</span>
+            </div>
+            <div class="header-actions">
+                <button id="new-chat-btn" class="toolbar-btn" title="Open an additional independent chat session">➕ New Chat</button>
+                <button id="clear-chat-btn" class="toolbar-btn" title="Clear messages in the current chat session">🧹 Clear</button>
+                <button id="theme-toggle-btn" class="toolbar-btn icon-only" title="Toggle Dark / Light Theme">☀️</button>
+                <button id="logout-btn" class="toolbar-btn hidden" title="Lock / Sign out of Web Interface">🔒 Lock</button>
+            </div>
+        </header>
+
+        <!-- Multi-Session Tab Bar -->
+        <nav id="session-tabs" class="session-tabs" aria-label="Chat Sessions"></nav>
+
+        <!-- Scrollable Messages Stream -->
+        <main id="messages-scroll" class="messages-scroll">
+            <div id="messages-container" class="messages-container"></div>
+            <div id="thinking-row" class="message-row assistant hidden">
+                <div class="message-block">
+                    <div class="message-bubble assistant thinking-bubble">
+                        <span class="thinking-dots"><span></span><span></span><span></span></span>
+                        <span>Thinking...</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Bottom Composer Area -->
+        <footer class="composer-area">
+            <!-- Attachment Chips Bar -->
+            <div id="attachments-bar" class="attachments-bar hidden"></div>
+
+            <!-- @Staff Mention Autocomplete Popup -->
+            <div id="staff-popup" class="staff-popup hidden" role="listbox" aria-label="Mention Staff Specialist">
+                <div class="staff-popup-header">👥 Mention Staff Member (@...)</div>
+                <div id="staff-popup-list" class="staff-popup-list"></div>
+            </div>
+
+            <div class="composer-row">
+                <input id="file-input" type="file" multiple class="hidden" />
+                <button id="attach-btn" type="button" class="attach-btn" title="Attach files (pdf, md, txt, code) or media">📎</button>
+                <textarea
+                    id="chat-input"
+                    class="chat-input"
+                    rows="1"
+                    placeholder="Ask Nadia anything, or type @ to mention a specialist..."
+                ></textarea>
+                <button id="send-btn" type="button" class="primary-btn send-btn" title="Send message (Enter)">Send</button>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Bubble Right-Click Context Menu -->
+    <div id="bubble-context-menu" class="context-menu hidden" role="menu">
+        <button type="button" data-action="copy-selection" class="context-item">📋 Copy Selection</button>
+        <button type="button" data-action="copy-markdown" class="context-item">📄 Copy Message</button>
+        <button type="button" data-action="copy-plain" class="context-item">📝 Copy Plain Text</button>
+        <button type="button" data-action="select-all" class="context-item">🔍 Select All</button>
+        <div class="context-divider"></div>
+        <button type="button" data-action="print" class="context-item">🖨️ Print Message...</button>
+        <button type="button" data-action="open-detail" class="context-item">🗔 Open in Detail View</button>
+    </div>
+
+    <!-- Message Detail Modal (Double-Click or Context Menu) -->
+    <div id="detail-modal" class="modal-backdrop hidden">
+        <div class="detail-dialog">
+            <div class="detail-header">
+                <div>
+                    <h3 id="detail-title">Message Detail (Markdown)</h3>
+                    <span id="detail-timestamp" class="detail-timestamp"></span>
+                </div>
+                <button id="detail-close-btn" type="button" class="toolbar-btn icon-only" title="Close (Esc)">✕</button>
+            </div>
+            <div id="detail-body" class="detail-body markdown-body"></div>
+            <div class="detail-footer">
+                <button id="detail-copy-btn" type="button" class="toolbar-btn" title="Copy selected text or full plain text">📋 Copy</button>
+                <button id="detail-print-btn" type="button" class="toolbar-btn" title="Print Markdown document">🖨️ Print</button>
+                <button id="detail-save-btn" type="button" class="toolbar-btn" title="Download message as Markdown (.md)">💾 Save As</button>
+                <button id="detail-rag-btn" type="button" class="primary-btn" title="Ingest message into Nadia RAG vector database">🧠 Send to RAG</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+</body>
+</html>
+

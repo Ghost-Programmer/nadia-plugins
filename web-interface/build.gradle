@@ -1,0 +1,30 @@
+plugins {
+    id 'org.openjfx.javafxplugin'
+}
+
+description = 'Browser-accessible Web Chat Interface PF4J plugin for Nadia with multi-session chat, @Staff autocomplete, file attachments, Markdown/Mermaid rendering, RAG ingestion, scheduled cron streaming, and a dedicated System Settings tab.'
+
+javafx {
+    version = '23'
+    modules = [ 'javafx.controls', 'javafx.fxml', 'javafx.web' ]
+    configuration = 'compileOnly'
+}
+
+dependencies {
+    compileOnly 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+}
+
+tasks.named('jar') {
+    archiveBaseName = 'web-interface'
+    manifest {
+        attributes(
+            'Plugin-Id': 'web-interface',
+            'Plugin-Version': project.version.toString(),
+            'Plugin-Provider': 'Miller Software Solutions LLC',
+            'Plugin-Description': project.description,
+            'Plugin-License': 'Apache-2.0',
+            'Plugin-Class': 'com.nadia.plugin.web.WebInterfacePlugin'
+        )
+    }
+}
+
