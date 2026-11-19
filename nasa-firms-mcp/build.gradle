@@ -1,0 +1,19 @@
+description = 'NASA FIRMS Active Fire Detection & NASA EONET Natural Events MCP Tool PF4J plugin for Nadia.'
+
+dependencies {
+    compileOnly 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+}
+
+tasks.named('jar') {
+    archiveBaseName = 'nasa-firms-mcp'
+    manifest {
+        attributes(
+            'Plugin-Id': 'nasa-firms-mcp',
+            'Plugin-Version': project.version.toString(),
+            'Plugin-Provider': 'Miller Software Solutions LLC',
+            'Plugin-Description': project.description,
+            'Plugin-License': 'Apache-2.0',
+            'Plugin-Class': 'com.nadia.plugin.firms.NasaFirmsPlugin'
+        )
+    }
+}

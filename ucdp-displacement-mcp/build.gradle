@@ -1,0 +1,19 @@
+description = 'UCDP Georeferenced Conflict Events & UNHCR Refugee Displacement API MCP Tool PF4J plugin for Nadia.'
+
+dependencies {
+    compileOnly 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+}
+
+tasks.named('jar') {
+    archiveBaseName = 'ucdp-displacement-mcp'
+    manifest {
+        attributes(
+            'Plugin-Id': 'ucdp-displacement-mcp',
+            'Plugin-Version': project.version.toString(),
+            'Plugin-Provider': 'Miller Software Solutions LLC',
+            'Plugin-Description': project.description,
+            'Plugin-License': 'Apache-2.0',
+            'Plugin-Class': 'com.nadia.plugin.ucdp.UcdpDisplacementPlugin'
+        )
+    }
+}

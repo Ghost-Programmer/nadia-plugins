@@ -1,0 +1,19 @@
+description = 'FRED Economic Series, IMF SDMX Macro Data & UN Comtrade / WTO Bilateral Trade MCP Tool PF4J plugin for Nadia.'
+
+dependencies {
+    compileOnly 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+}
+
+tasks.named('jar') {
+    archiveBaseName = 'macro-trade-mcp'
+    manifest {
+        attributes(
+            'Plugin-Id': 'macro-trade-mcp',
+            'Plugin-Version': project.version.toString(),
+            'Plugin-Provider': 'Miller Software Solutions LLC',
+            'Plugin-Description': project.description,
+            'Plugin-License': 'Apache-2.0',
+            'Plugin-Class': 'com.nadia.plugin.macrotrade.MacroTradePlugin'
+        )
+    }
+}
