@@ -1,0 +1,19 @@
+description = 'GDELT Project (DOC 2.0 Articles, Volume/Tone Timelines & GEO 2.0 Events) MCP Tool PF4J plugin for Nadia.'
+
+dependencies {
+    compileOnly 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+}
+
+tasks.named('jar') {
+    archiveBaseName = 'gdelt-mcp'
+    manifest {
+        attributes(
+            'Plugin-Id': 'gdelt-mcp',
+            'Plugin-Version': project.version.toString(),
+            'Plugin-Provider': 'Miller Software Solutions LLC',
+            'Plugin-Description': project.description,
+            'Plugin-License': 'Apache-2.0',
+            'Plugin-Class': 'com.nadia.plugin.gdelt.GdeltPlugin'
+        )
+    }
+}
