@@ -6,6 +6,7 @@ rootProject.name = 'nadia-plugins'
 
 include 'world-map-viewer'
 include 'web-interface'
+include 'slack-integration'
 include 'lang-en-us'
 include 'lang-en-gb'
 include 'lang-es'
