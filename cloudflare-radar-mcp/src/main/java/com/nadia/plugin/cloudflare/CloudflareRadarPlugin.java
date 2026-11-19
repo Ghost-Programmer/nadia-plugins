@@ -4,7 +4,8 @@ import com.nadia.app.plugin.api.NadiaPlugin;
 import com.nadia.app.plugin.api.NadiaPluginContext;
 import org.pf4j.PluginWrapper;
 
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * PF4J plugin lifecycle entry point for the Cloudflare Radar API MCP tool plugin
@@ -27,10 +28,10 @@ public class CloudflareRadarPlugin extends NadiaPlugin {
 
     @Override
     protected void onStart(NadiaPluginContext context) {
-        context.registerProperties(
-                List.of(PROP_API_TOKEN, PROP_API_URL),
-                "Plugin: Cloudflare Radar MCP"
-        );
+        Map<String, String> props = new LinkedHashMap<>();
+        props.put(PROP_API_TOKEN, "Cloudflare API Token with Radar:Read permission for querying outages, traffic anomalies, DDoS attacks, and BGP events.");
+        props.put(PROP_API_URL, "Optional override base URL for the Cloudflare Radar v4 API.");
+        context.registerPropertiesWithDescriptions(props, "Plugin: Cloudflare Radar MCP");
         CloudflareRadarRuntime.getInstance().initialize(context);
     }
 

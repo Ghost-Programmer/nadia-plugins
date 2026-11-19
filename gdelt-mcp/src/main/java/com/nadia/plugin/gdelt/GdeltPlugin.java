@@ -4,7 +4,8 @@ import com.nadia.app.plugin.api.NadiaPlugin;
 import com.nadia.app.plugin.api.NadiaPluginContext;
 import org.pf4j.PluginWrapper;
 
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * PF4J plugin lifecycle entry point for the GDELT Project (Global Database of Events,
@@ -27,10 +28,10 @@ public class GdeltPlugin extends NadiaPlugin {
 
     @Override
     protected void onStart(NadiaPluginContext context) {
-        context.registerProperties(
-                List.of(PROP_DOC_API_URL, PROP_GEO_API_URL),
-                "Plugin: GDELT Project MCP"
-        );
+        Map<String, String> props = new LinkedHashMap<>();
+        props.put(PROP_DOC_API_URL, "Optional override URL for the GDELT Project DOC 2.0 API endpoint.");
+        props.put(PROP_GEO_API_URL, "Optional override URL for the GDELT Project GEO 2.0 API endpoint.");
+        context.registerPropertiesWithDescriptions(props, "Plugin: GDELT Project MCP");
         GdeltRuntime.getInstance().initialize(context);
     }
 

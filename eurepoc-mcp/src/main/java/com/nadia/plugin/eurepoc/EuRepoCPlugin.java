@@ -4,7 +4,8 @@ import com.nadia.app.plugin.api.NadiaPlugin;
 import com.nadia.app.plugin.api.NadiaPluginContext;
 import org.pf4j.PluginWrapper;
 
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * PF4J plugin lifecycle entry point for the EuRepoC (European Repository of Cyber Incidents)
@@ -28,10 +29,11 @@ public class EuRepoCPlugin extends NadiaPlugin {
 
     @Override
     protected void onStart(NadiaPluginContext context) {
-        context.registerProperties(
-                List.of(PROP_DATASET_URL, PROP_API_URL, PROP_API_KEY),
-                "Plugin: EuRepoC MCP"
-        );
+        Map<String, String> props = new LinkedHashMap<>();
+        props.put(PROP_DATASET_URL, "Optional direct HTTP(S) URL or local file path to a EuRepoC JSON/CSV dataset (auto-discovers latest Zenodo release if blank).");
+        props.put(PROP_API_URL, "Optional base URL for a dedicated EuRepoC REST API endpoint.");
+        props.put(PROP_API_KEY, "Optional Bearer API key for authenticating against a dedicated EuRepoC REST API.");
+        context.registerPropertiesWithDescriptions(props, "Plugin: EuRepoC MCP");
         EuRepoCRuntime.getInstance().initialize(context);
     }
 

@@ -4,7 +4,8 @@ import com.nadia.app.plugin.api.NadiaPlugin;
 import com.nadia.app.plugin.api.NadiaPluginContext;
 import org.pf4j.PluginWrapper;
 
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * PF4J plugin lifecycle entry point for the CISA KEV &amp; Cybersecurity Advisories
@@ -27,10 +28,10 @@ public class CisaKevPlugin extends NadiaPlugin {
 
     @Override
     protected void onStart(NadiaPluginContext context) {
-        context.registerProperties(
-                List.of(PROP_KEV_URL, PROP_ADVISORIES_FEED_URL),
-                "Plugin: CISA KEV & Advisories MCP"
-        );
+        Map<String, String> props = new LinkedHashMap<>();
+        props.put(PROP_KEV_URL, "Optional override URL for the CISA Known Exploited Vulnerabilities (KEV) JSON feed.");
+        props.put(PROP_ADVISORIES_FEED_URL, "Optional override URL for the CISA Cybersecurity Advisories XML/RSS feed.");
+        context.registerPropertiesWithDescriptions(props, "Plugin: CISA KEV & Advisories MCP");
         CisaKevRuntime.getInstance().initialize(context);
     }
 

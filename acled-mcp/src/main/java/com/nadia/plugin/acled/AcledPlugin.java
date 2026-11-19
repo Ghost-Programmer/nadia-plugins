@@ -4,7 +4,8 @@ import com.nadia.app.plugin.api.NadiaPlugin;
 import com.nadia.app.plugin.api.NadiaPluginContext;
 import org.pf4j.PluginWrapper;
 
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * PF4J plugin lifecycle entry point for the ACLED (Armed Conflict Location &amp; Event Data)
@@ -29,10 +30,12 @@ public class AcledPlugin extends NadiaPlugin {
 
     @Override
     protected void onStart(NadiaPluginContext context) {
-        context.registerProperties(
-                List.of(PROP_EMAIL, PROP_PASSWORD, PROP_API_KEY, PROP_API_URL),
-                "Plugin: ACLED MCP"
-        );
+        Map<String, String> props = new LinkedHashMap<>();
+        props.put(PROP_EMAIL, "Registered myACLED account email address used for OAuth or legacy API authentication.");
+        props.put(PROP_PASSWORD, "myACLED account password used to obtain OAuth2 Bearer access tokens (recommended).");
+        props.put(PROP_API_KEY, "Optional legacy ACLED API key fallback when OAuth password authentication is not used.");
+        props.put(PROP_API_URL, "Optional override URL for the ACLED read API endpoint.");
+        context.registerPropertiesWithDescriptions(props, "Plugin: ACLED MCP");
         AcledRuntime.getInstance().initialize(context);
     }
 
