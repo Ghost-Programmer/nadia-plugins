@@ -111,11 +111,12 @@ public class SlackAlertBackgroundService implements NadiaBackgroundServiceExtens
             return;
         }
 
-        String alertMessage = buildStaffEventAlertMessage(category, subType.toLowerCase(), target, payload);
-        if (alertMessage != null) {
-            String alertKey = category + "::" + subType.toLowerCase() + "::"
-                    + (target != null && !target.isBlank() ? target.trim() : "none");
-            if (shouldSendAlert(alertKey)) {
+        String lowerSub = subType.toLowerCase();
+        String alertKey = category + "::" + lowerSub + "::"
+                + (target != null && !target.isBlank() ? target.trim() : "none");
+        if (!isDebounced(alertKey)) {
+            String alertMessage = buildStaffEventAlertMessage(category, lowerSub, target, payload);
+            if (alertMessage != null && shouldSendAlert(alertKey)) {
                 dispatchAsyncNotification(client, alertMessage);
             }
         }
@@ -417,6 +418,11 @@ public class SlackAlertBackgroundService implements NadiaBackgroundServiceExtens
         });
     }
 
+    private boolean isDebounced(String alertKey) {
+        Long lastSent = alertDebounceMap.get(alertKey);
+        return lastSent != null && (System.currentTimeMillis() - lastSent) < DEFAULT_DEBOUNCE_MS;
+    }
+
     /**
      * Checks whether an alert key should be sent or suppressed by the 60-second
      * debounce window.
@@ -426,15 +432,21 @@ public class SlackAlertBackgroundService implements NadiaBackgroundServiceExtens
      */
     public boolean shouldSendAlert(String alertKey) {
         long now = System.currentTimeMillis();
-        Long lastSent = alertDebounceMap.get(alertKey);
-        if (lastSent != null && (now - lastSent) < DEFAULT_DEBOUNCE_MS) {
-            return false;
-        }
-        alertDebounceMap.put(alertKey, now);
-        if (alertDebounceMap.size() > 500) {
+        String boundedKey = alertKey != null && alertKey.length() > 160
+                ? alertKey.substring(0, 128) + "#" + Integer.toHexString(alertKey.hashCode())
+                : alertKey;
+        final boolean[] allowed = {false};
+        alertDebounceMap.compute(boundedKey, (k, lastSent) -> {
+            if (lastSent != null && (now - lastSent) < DEFAULT_DEBOUNCE_MS) {
+                return lastSent;
+            }
+            allowed[0] = true;
+            return now;
+        });
+        if (allowed[0] && alertDebounceMap.size() > 500) {
             alertDebounceMap.entrySet().removeIf(entry -> (now - entry.getValue()) > (DEFAULT_DEBOUNCE_MS * 2));
         }
-        return true;
+        return allowed[0];
     }
 
     /**

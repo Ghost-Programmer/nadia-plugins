@@ -177,6 +177,15 @@ public final class SlackSettingsTab {
             }
         };
         runtime.addStatusListener(statusUpdater);
+        content.sceneProperty().addListener((obs, oldScene, newScene) -> {
+            if (newScene == null) {
+                runtime.removeStatusListener(statusUpdater);
+            } else {
+                runtime.removeStatusListener(statusUpdater);
+                runtime.addStatusListener(statusUpdater);
+                statusUpdater.run();
+            }
+        });
 
         // Bottom Action Buttons
         HBox actionBox = new HBox(10);

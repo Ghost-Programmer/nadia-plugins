@@ -65,7 +65,7 @@ public final class SlackRuntime {
      */
     public synchronized void shutdown() {
         if (socketClient != null) {
-            socketClient.stop();
+            socketClient.close();
             socketClient = null;
         }
         notifyStatusListeners();

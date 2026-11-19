@@ -389,15 +389,16 @@ public final class WebInterfaceSettingsTab {
                 String tlsSummary = !activeCfg.tlsEnabled()
                         ? "Plain HTTP"
                         : (activeCfg.hasCustomKeystore() ? "🔐 Custom Keystore TLS" : "🔐 Auto Self-Signed TLS");
-                List<String> lanUrls = srv.getLanUrls();
-                if (!lanUrls.isEmpty()) {
-                    urlInfoLabel.setText("LAN Access URLs: " + String.join("  |  ", lanUrls)
-                            + "  ·  " + tlsSummary
-                            + (activeCfg.isAuthRequired() ? "  ·  🔒 Token Protected" : "  ·  ⚠ No Access Token Set"));
-                } else {
-                    urlInfoLabel.setText("Bound to Localhost (" + activeCfg.host() + ")  ·  " + tlsSummary
-                            + (activeCfg.isAuthRequired() ? "  ·  🔒 Access Token Active" : "  ·  Localhost Open Access"));
-                }
+                String authBadge = activeCfg.isAuthRequired() ? "  ·  🔒 Token Protected" : "  ·  ⚠ No Access Token Set";
+                String localAuthBadge = activeCfg.isAuthRequired() ? "  ·  🔒 Access Token Active" : "  ·  Localhost Open Access";
+                String boundHost = activeCfg.host();
+                Thread.ofVirtual().name("web-ui-lan-urls").start(() -> {
+                    List<String> lanUrls = srv.getLanUrls();
+                    String infoText = !lanUrls.isEmpty()
+                            ? "LAN Access URLs: " + String.join("  |  ", lanUrls) + "  ·  " + tlsSummary + authBadge
+                            : "Bound to Localhost (" + boundHost + ")  ·  " + tlsSummary + localAuthBadge;
+                    Platform.runLater(() -> urlInfoLabel.setText(infoText));
+                });
             } else {
                 String err = (srv != null) ? srv.getLastErrorMessage() : "";
                 if (err != null && !err.isBlank()) {
@@ -411,41 +412,77 @@ public final class WebInterfaceSettingsTab {
             }
         };
 
-        runtime.addStatusListener(() -> {
+        Runnable statusListener = () -> {
             if (Platform.isFxApplicationThread()) {
                 refreshStatusUi.run();
             } else {
                 Platform.runLater(refreshStatusUi);
             }
+        };
+        runtime.addStatusListener(statusListener);
+        outer.sceneProperty().addListener((obs, oldScene, newScene) -> {
+            if (newScene == null) {
+                runtime.removeStatusListener(statusListener);
+            } else {
+                runtime.removeStatusListener(statusListener);
+                runtime.addStatusListener(statusListener);
+                refreshStatusUi.run();
+            }
         });
         refreshStatusUi.run();
 
         regenCertBtn.setOnAction(e -> {
-            try {
-                Path certPath = runtime.regenerateSelfSignedCertificate();
-                feedbackLabel.setText("🔐 Regenerated self-signed TLS keystore: " + certPath.getFileName());
-            } catch (Exception ex) {
-                feedbackLabel.setText("⚠ Failed regenerating certificate: " + ex.getMessage());
-            }
-            refreshStatusUi.run();
+            regenCertBtn.setDisable(true);
+            feedbackLabel.setText("🔐 Regenerating self-signed TLS keystore...");
+            Thread.ofVirtual().name("web-ui-regen-cert").start(() -> {
+                String msg;
+                try {
+                    Path certPath = runtime.regenerateSelfSignedCertificate();
+                    msg = "🔐 Regenerated self-signed TLS keystore: " + certPath.getFileName();
+                } catch (Exception ex) {
+                    msg = "⚠ Failed regenerating certificate: " + ex.getMessage();
+                }
+                String finalMsg = msg;
+                Platform.runLater(() -> {
+                    regenCertBtn.setDisable(false);
+                    feedbackLabel.setText(finalMsg);
+                    refreshStatusUi.run();
+                });
+            });
         });
 
         startBtn.setOnAction(e -> {
-            boolean ok = runtime.startServerNow();
-            feedbackLabel.setText(ok ? "Web Interface server started." : "Failed to start server—check port or keystore settings.");
-            refreshStatusUi.run();
+            startBtn.setDisable(true);
+            Thread.ofVirtual().name("web-ui-start").start(() -> {
+                boolean ok = runtime.startServerNow();
+                Platform.runLater(() -> {
+                    feedbackLabel.setText(ok ? "Web Interface server started." : "Failed to start server—check port or keystore settings.");
+                    refreshStatusUi.run();
+                });
+            });
         });
 
         stopBtn.setOnAction(e -> {
-            runtime.stopServerNow();
-            feedbackLabel.setText("Web Interface server stopped.");
-            refreshStatusUi.run();
+            stopBtn.setDisable(true);
+            Thread.ofVirtual().name("web-ui-stop").start(() -> {
+                runtime.stopServerNow();
+                Platform.runLater(() -> {
+                    feedbackLabel.setText("Web Interface server stopped.");
+                    refreshStatusUi.run();
+                });
+            });
         });
 
         restartBtn.setOnAction(e -> {
-            boolean ok = runtime.startServerNow();
-            feedbackLabel.setText(ok ? "Web Interface server restarted." : "Failed to restart server.");
-            refreshStatusUi.run();
+            restartBtn.setDisable(true);
+            Thread.ofVirtual().name("web-ui-restart").start(() -> {
+                boolean ok = runtime.startServerNow();
+                Platform.runLater(() -> {
+                    restartBtn.setDisable(false);
+                    feedbackLabel.setText(ok ? "Web Interface server restarted." : "Failed to restart server.");
+                    refreshStatusUi.run();
+                });
+            });
         });
 
         copyUrlBtn.setOnAction(e -> {
@@ -459,16 +496,22 @@ public final class WebInterfaceSettingsTab {
         });
 
         openBrowserBtn.setOnAction(e -> {
-            WebInterfaceServer srv = runtime.getServer();
-            if (srv == null || !srv.isRunning()) {
-                runtime.startServerNow();
-                srv = runtime.getServer();
-            }
-            WebInterfaceConfig cfg = runtime.loadCurrentConfig();
-            String url = srv != null ? srv.getPrimaryUrl() : (cfg.scheme() + "://127.0.0.1:" + cfg.port());
-            openUrlInSystemBrowser(url);
-            feedbackLabel.setText("Opened " + url + " in system browser.");
-            refreshStatusUi.run();
+            openBrowserBtn.setDisable(true);
+            Thread.ofVirtual().name("web-ui-open-browser").start(() -> {
+                WebInterfaceServer srv = runtime.getServer();
+                if (srv == null || !srv.isRunning()) {
+                    runtime.startServerNow();
+                    srv = runtime.getServer();
+                }
+                WebInterfaceConfig cfg = runtime.loadCurrentConfig();
+                String url = srv != null ? srv.getPrimaryUrl() : (cfg.scheme() + "://127.0.0.1:" + cfg.port());
+                openUrlInSystemBrowser(url);
+                Platform.runLater(() -> {
+                    openBrowserBtn.setDisable(false);
+                    feedbackLabel.setText("Opened " + url + " in system browser.");
+                    refreshStatusUi.run();
+                });
+            });
         });
 
         saveApplyBtn.setOnAction(e -> {
@@ -512,15 +555,22 @@ public final class WebInterfaceSettingsTab {
                     enableCronCheck.isSelected()
             );
 
-            boolean ok = runtime.saveAndApplyConfig(updated);
-            if (ok) {
-                feedbackLabel.setText("✅ Saved " + updated.scheme().toUpperCase() + " settings to nadia.properties and applied live.");
-            } else {
-                WebInterfaceServer srv = runtime.getServer();
-                String reason = (srv != null && !srv.getLastErrorMessage().isBlank()) ? srv.getLastErrorMessage() : ("port " + parsedPort);
-                feedbackLabel.setText("⚠ Settings saved, but server failed to bind: " + reason);
-            }
-            refreshStatusUi.run();
+            saveApplyBtn.setDisable(true);
+            feedbackLabel.setText("Applying " + updated.scheme().toUpperCase() + " configuration...");
+            Thread.ofVirtual().name("web-ui-save-apply").start(() -> {
+                boolean ok = runtime.saveAndApplyConfig(updated);
+                Platform.runLater(() -> {
+                    saveApplyBtn.setDisable(false);
+                    if (ok) {
+                        feedbackLabel.setText("✅ Saved " + updated.scheme().toUpperCase() + " settings to nadia.properties and applied live.");
+                    } else {
+                        WebInterfaceServer srv = runtime.getServer();
+                        String reason = (srv != null && !srv.getLastErrorMessage().isBlank()) ? srv.getLastErrorMessage() : ("port " + parsedPort);
+                        feedbackLabel.setText("⚠ Settings saved, but server failed to bind: " + reason);
+                    }
+                    refreshStatusUi.run();
+                });
+            });
         });
 
         return outer;

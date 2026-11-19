@@ -295,17 +295,87 @@ public class MapService {
      * @param iconType  icon identifier
      * @param metadata  telemetry and registry metadata map
      */
+    /** Maximum historical waypoints retained per tracked object. */
+    public static final int MAX_PATH_POINTS = 60;
+    /** Maximum total tracked objects before oldest non-pinned entries are evicted. */
+    public static final int MAX_OBJECTS = 500;
+
+    /**
+     * Batch plot payload used by sweep trackers ({@link AviationService}, {@link SatelliteService})
+     * to update all entities in a single notification pass.
+     *
+     * @param name      entity name or callsign
+     * @param latitude  latitude in degrees
+     * @param longitude longitude in degrees
+     * @param heading   heading in degrees
+     * @param shouldPan whether to pan viewport
+     * @param iconType  icon identifier ({@code plane}, {@code satellite}, {@code earthquake})
+     * @param metadata  optional telemetry metadata map
+     */
+    public record PlotRequest(
+            String name,
+            double latitude,
+            double longitude,
+            double heading,
+            boolean shouldPan,
+            String iconType,
+            Map<String, Object> metadata
+    ) {}
+
     public synchronized void plotObject(String name, double latitude, double longitude, double heading,
             boolean shouldPan, String iconType, Map<String, Object> metadata) {
+        appendLocationLocked(name, latitude, longitude, heading, shouldPan, iconType, metadata);
+        notifyChange();
+    }
+
+    /**
+     * Plots a batch of entity updates atomically and fires {@code onChangeCallback} once.
+     *
+     * @param batch list of {@link PlotRequest} items
+     */
+    public synchronized void plotObjectsBatch(List<PlotRequest> batch) {
+        if (batch == null || batch.isEmpty()) {
+            return;
+        }
+        for (PlotRequest req : batch) {
+            if (req != null && req.name() != null) {
+                appendLocationLocked(req.name(), req.latitude(), req.longitude(),
+                        req.heading(), req.shouldPan(), req.iconType(), req.metadata());
+            }
+        }
+        notifyChange();
+    }
+
+    private void appendLocationLocked(String name, double latitude, double longitude, double heading,
+            boolean shouldPan, String iconType, Map<String, Object> metadata) {
+        if (!objects.containsKey(name) && objects.size() >= MAX_OBJECTS) {
+            var it = objects.entrySet().iterator();
+            if (it.hasNext()) {
+                it.next();
+                it.remove();
+            }
+        }
         MapObject obj = objects.computeIfAbsent(name, MapObject::new);
         if (metadata != null) {
             obj.metadata.putAll(metadata);
         }
         if ("earthquake".equalsIgnoreCase(iconType)) {
             obj.path.clear();
+        } else {
+            while (obj.path.size() >= MAX_PATH_POINTS) {
+                obj.path.remove(0);
+            }
         }
-        obj.path.add(new Location(latitude, longitude, heading, shouldPan, iconType, metadata));
-        notifyChange();
+        obj.path.add(new Location(latitude, longitude, heading, shouldPan, iconType, null));
+    }
+
+    /**
+     * Returns the current number of tracked map objects without copying the backing collection.
+     *
+     * @return object count
+     */
+    public synchronized int getObjectCount() {
+        return objects.size();
     }
 
     /**

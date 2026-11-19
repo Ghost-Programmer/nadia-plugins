@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -58,6 +59,10 @@ public record SlackConfig(
             PROP_ALLOWED_USERS,
             PROP_NOTIFICATION_CHANNEL);
 
+    private static final Pattern ALLOWED_USERS_SPLIT = Pattern.compile("[,;\\s]+");
+    private static volatile String cachedAllowedRaw;
+    private static volatile Set<String> cachedAllowedSet = Collections.emptySet();
+
     /**
      * Constructs a normalized {@code SlackConfig}.
      */
@@ -90,14 +95,21 @@ public record SlackConfig(
         if (context == null) {
             return defaults();
         }
-        Properties legacy = loadRawNadiaProperties(context);
+        String pEnabled = context.getProperty(PROP_ENABLED, null);
+        String pBot = context.getProperty(PROP_BOT_TOKEN, null);
+        String pApp = context.getProperty(PROP_APP_TOKEN, null);
+        String pAllowed = context.getProperty(PROP_ALLOWED_USERS, null);
+        String pChannel = context.getProperty(PROP_NOTIFICATION_CHANNEL, null);
 
-        String rawEnabled = readWithLegacyFallback(context, PROP_ENABLED, legacy, "nadia.slack.enabled", "false");
-        String botTok = readWithLegacyFallback(context, PROP_BOT_TOKEN, legacy, "nadia.slack.bot-token", "");
-        String appTok = readWithLegacyFallback(context, PROP_APP_TOKEN, legacy, "nadia.slack.app-token", "");
-        String allowed = readWithLegacyFallback(context, PROP_ALLOWED_USERS, legacy, "nadia.slack.allowed-users", "");
-        String channel = readWithLegacyFallback(context, PROP_NOTIFICATION_CHANNEL, legacy,
-                "nadia.slack.notification-channel", "");
+        Properties legacy = (isBlank(pEnabled) || isBlank(pBot) || isBlank(pApp) || isBlank(pAllowed) || isBlank(pChannel))
+                ? loadRawNadiaProperties(context)
+                : null;
+
+        String rawEnabled = resolveWithLegacy(pEnabled, legacy, "nadia.slack.enabled", "false");
+        String botTok = resolveWithLegacy(pBot, legacy, "nadia.slack.bot-token", "");
+        String appTok = resolveWithLegacy(pApp, legacy, "nadia.slack.app-token", "");
+        String allowed = resolveWithLegacy(pAllowed, legacy, "nadia.slack.allowed-users", "");
+        String channel = resolveWithLegacy(pChannel, legacy, "nadia.slack.notification-channel", "");
 
         return new SlackConfig(
                 Boolean.parseBoolean(rawEnabled),
@@ -105,6 +117,10 @@ public record SlackConfig(
                 appTok,
                 allowed,
                 channel);
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
     }
 
     /**
@@ -134,11 +150,18 @@ public record SlackConfig(
         if (allowedUsers == null || allowedUsers.isBlank()) {
             return Collections.emptySet();
         }
-        return Arrays.stream(allowedUsers.split("[,;\\s]+"))
+        String raw = allowedUsers;
+        if (raw.equals(cachedAllowedRaw)) {
+            return cachedAllowedSet;
+        }
+        Set<String> parsed = Arrays.stream(ALLOWED_USERS_SPLIT.split(raw))
                 .map(String::trim)
                 .map(String::toLowerCase)
                 .filter(s -> !s.isEmpty())
-                .collect(Collectors.toSet());
+                .collect(Collectors.toUnmodifiableSet());
+        cachedAllowedRaw = raw;
+        cachedAllowedSet = parsed;
+        return parsed;
     }
 
     /**
@@ -169,14 +192,12 @@ public record SlackConfig(
         return !botToken.isBlank() && !appToken.isBlank();
     }
 
-    private static String readWithLegacyFallback(NadiaPluginContext context,
-            String propKey,
+    private static String resolveWithLegacy(String primaryVal,
             Properties legacyProps,
             String legacyKey,
             String defaultVal) {
-        String val = context.getProperty(propKey, null);
-        if (val != null && !val.isBlank()) {
-            return val.trim();
+        if (primaryVal != null && !primaryVal.isBlank()) {
+            return primaryVal.trim();
         }
         if (legacyProps != null) {
             String legacyVal = legacyProps.getProperty(legacyKey);
@@ -184,7 +205,7 @@ public record SlackConfig(
                 return legacyVal.trim();
             }
         }
-        return val != null ? val.trim() : defaultVal;
+        return primaryVal != null ? primaryVal.trim() : defaultVal;
     }
 
     private static Properties loadRawNadiaProperties(NadiaPluginContext context) {

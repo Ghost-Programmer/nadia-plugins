@@ -77,17 +77,29 @@ public class WebChatSessionStore {
     ) {
     }
 
+    /** Maximum messages retained per session before oldest entries are evicted. */
+    public static final int MAX_MESSAGES_PER_SESSION = 500;
+    /** Maximum interactive sessions retained concurrently. */
+    public static final int MAX_INTERACTIVE_SESSIONS = 50;
+
     private static final class SessionData {
         final String id;
         volatile String title;
         final boolean cronSession;
         volatile boolean thinking;
-        final List<ChatMessage> messages = new CopyOnWriteArrayList<>();
+        final java.util.Deque<ChatMessage> messages = new java.util.ArrayDeque<>();
 
         SessionData(String id, String title, boolean cronSession) {
             this.id = id;
             this.title = title;
             this.cronSession = cronSession;
+        }
+
+        void addBounded(ChatMessage msg) {
+            while (messages.size() >= MAX_MESSAGES_PER_SESSION) {
+                messages.pollFirst();
+            }
+            messages.addLast(msg);
         }
     }
 
@@ -145,6 +157,21 @@ public class WebChatSessionStore {
         SessionData session = new SessionData(id, title, false);
         session.messages.add(newMessage(id, false, "Nadia", DEFAULT_GREETING, List.of()));
 
+        // Evict oldest interactive session if capacity is reached
+        long interactiveCount = sessions.values().stream().filter(s -> !s.cronSession).count();
+        if (interactiveCount >= MAX_INTERACTIVE_SESSIONS) {
+            String oldestKey = null;
+            for (SessionData existing : sessions.values()) {
+                if (!existing.cronSession) {
+                    oldestKey = existing.id;
+                    break;
+                }
+            }
+            if (oldestKey != null) {
+                sessions.remove(oldestKey);
+            }
+        }
+
         // Insert interactive chat tabs before the Scheduled Tasks tab so Scheduled Tasks stays anchored
         SessionData cron = sessions.remove(CRON_SESSION_ID);
         sessions.put(id, session);
@@ -200,7 +227,7 @@ public class WebChatSessionStore {
                 markdown,
                 attachments != null ? List.copyOf(attachments) : Collections.emptyList()
         );
-        data.messages.add(msg);
+        data.addBounded(msg);
         return msg;
     }
 

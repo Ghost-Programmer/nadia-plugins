@@ -60,8 +60,16 @@ public class FaaRegistryService {
     private static final Pattern DATA_LABEL_PATTERN = Pattern
             .compile("<td[^>]*data-label=\"([^\"]*)\"[^>]*>([\\s\\S]*?)</td>", Pattern.CASE_INSENSITIVE);
 
+    private static final int MAX_CACHE_ENTRIES = 5000;
+    private static final long ERROR_NEGATIVE_CACHE_MS = 5L * 60L * 1000L;
+
     private final HttpClient httpClient;
     private final Map<String, FaaAircraftRecord> cache = new ConcurrentHashMap<>();
+    private final Map<String, Long> errorBackoffUntil = new ConcurrentHashMap<>();
+    private final Map<String, CompletableFuture<FaaAircraftRecord>> inFlight = new ConcurrentHashMap<>();
+    private final java.util.concurrent.Semaphore concurrencyLimiter = new java.util.concurrent.Semaphore(4);
+    private final java.util.concurrent.ExecutorService lookupExecutor =
+            java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
 
     private volatile String cachedToken;
     private volatile Instant tokenTimestamp = Instant.EPOCH;
@@ -107,31 +115,86 @@ public class FaaRegistryService {
         if (cached != null) {
             return cached;
         }
+        Long retryAfter = errorBackoffUntil.get(normalized);
+        if (retryAfter != null && System.currentTimeMillis() < retryAfter) {
+            return FaaAircraftRecord.createErrorRecord(normalized, "Temporarily backed off after recent lookup failure");
+        }
 
         try {
-            FaaAircraftRecord record = executeFaaQuery(normalized);
-            if (record != null) {
-                cache.put(normalized, record);
-                return record;
+            concurrencyLimiter.acquire();
+            try {
+                FaaAircraftRecord record = executeFaaQuery(normalized);
+                if (record != null) {
+                    putBoundedCache(normalized, record);
+                    errorBackoffUntil.remove(normalized);
+                    return record;
+                }
+                FaaAircraftRecord notFound = new FaaAircraftRecord(normalized, false);
+                putBoundedCache(normalized, notFound);
+                errorBackoffUntil.remove(normalized);
+                return notFound;
+            } finally {
+                concurrencyLimiter.release();
             }
-            FaaAircraftRecord notFound = new FaaAircraftRecord(normalized, false);
-            cache.put(normalized, notFound);
-            return notFound;
         } catch (Exception e) {
+            errorBackoffUntil.put(normalized, System.currentTimeMillis() + ERROR_NEGATIVE_CACHE_MS);
             logger.warn("[FaaRegistryService] Exception querying FAA registry for {}: {}", normalized, e.getMessage());
             return FaaAircraftRecord.createErrorRecord(normalized, "Query failed: " + e.getMessage());
         }
     }
 
+    private void putBoundedCache(String key, FaaAircraftRecord record) {
+        if (cache.size() >= MAX_CACHE_ENTRIES && !cache.containsKey(key)) {
+            var it = cache.keySet().iterator();
+            int toRemove = MAX_CACHE_ENTRIES / 10;
+            while (it.hasNext() && toRemove-- > 0) {
+                it.next();
+                it.remove();
+            }
+        }
+        cache.put(key, record);
+    }
+
+    /**
+     * Direct O(1) lookup of a cached FAA record without copying the entire cache map.
+     *
+     * @param nNumber the FAA N-number
+     * @return cached record or {@code null}
+     */
+    public FaaAircraftRecord getCachedRecord(String nNumber) {
+        if (nNumber == null || nNumber.isBlank()) {
+            return null;
+        }
+        String normalized = nNumber.trim().toUpperCase(Locale.ROOT);
+        if (!normalized.startsWith("N")) {
+            normalized = "N" + normalized;
+        }
+        return cache.get(normalized);
+    }
+
     /**
      * Asynchronously queries the FAA Civil Aviation Registry for an aircraft by its
-     * N-Number.
+     * N-Number with in-flight deduplication on a bounded virtual-thread executor.
      *
      * @param nNumber the FAA N-number
      * @return a {@link CompletableFuture} containing the {@link FaaAircraftRecord}
      */
     public CompletableFuture<FaaAircraftRecord> queryNNumberAsync(String nNumber) {
-        return CompletableFuture.supplyAsync(() -> queryNNumber(nNumber));
+        if (nNumber == null || nNumber.isBlank()) {
+            return CompletableFuture.completedFuture(FaaAircraftRecord.createErrorRecord(nNumber, "N-Number cannot be empty"));
+        }
+        String normalized = nNumber.trim().toUpperCase(Locale.ROOT);
+        if (!normalized.startsWith("N")) {
+            normalized = "N" + normalized;
+        }
+        FaaAircraftRecord cached = cache.get(normalized);
+        if (cached != null) {
+            return CompletableFuture.completedFuture(cached);
+        }
+        final String key = normalized;
+        return inFlight.computeIfAbsent(key, k ->
+                CompletableFuture.supplyAsync(() -> queryNNumber(k), lookupExecutor)
+                        .whenComplete((res, err) -> inFlight.remove(k)));
     }
 
     /**
@@ -188,9 +251,23 @@ public class FaaRegistryService {
      */
     public void clearCache() {
         cache.clear();
+        errorBackoffUntil.clear();
         synchronized (tokenLock) {
             cachedToken = null;
             tokenTimestamp = Instant.EPOCH;
+        }
+    }
+
+    /**
+     * Releases background FAA lookup resources and closes the HTTP client on plugin unload.
+     */
+    public void shutdown() {
+        clearCache();
+        inFlight.clear();
+        lookupExecutor.shutdownNow();
+        try {
+            httpClient.close();
+        } catch (Exception ignored) {
         }
     }
 

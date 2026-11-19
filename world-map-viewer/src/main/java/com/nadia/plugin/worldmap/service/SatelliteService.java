@@ -272,6 +272,7 @@ public class SatelliteService {
             int plottedCount = 0;
 
             if (aboveNode != null && aboveNode.isArray()) {
+                java.util.List<MapService.PlotRequest> batch = new java.util.ArrayList<>(aboveNode.size());
                 for (JsonNode satNode : aboveNode) {
                     int satid = satNode.get("satid").asInt();
                     String satname = satNode.get("satname").asText().trim();
@@ -279,9 +280,10 @@ public class SatelliteService {
                     double satlng = satNode.get("satlng").asDouble();
 
                     String displayName = satname + " (" + satid + ")";
-                    mapService.plotObject(displayName, satlat, satlng, 0.0, false, "satellite");
+                    batch.add(new MapService.PlotRequest(displayName, satlat, satlng, 0.0, false, "satellite", null));
                     plottedCount++;
                 }
+                mapService.plotObjectsBatch(batch);
             }
 
             return String.format(Locale.US,

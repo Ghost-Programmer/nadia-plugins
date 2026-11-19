@@ -25,7 +25,10 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
 
 /**
  * Pure-JDK Slack Socket Mode (WebSocket) and Web API client for the
@@ -44,12 +47,17 @@ public class SlackSocketClient {
     public static final String DEFAULT_SLACK_API_BASE = "https://slack.com/api";
 
     private static final Logger logger = LoggerFactory.getLogger(SlackSocketClient.class);
+    private static final Pattern MENTION_TAG_PATTERN = Pattern.compile("<@[A-Z0-9]+>");
+    private static final Pattern WHITESPACE_PATTERN = Pattern.compile("\\s+");
+    private static final int MAX_FRAME_BUFFER_CAPACITY = 64 * 1024;
+    private static final long MAX_RECONNECT_BACKOFF_MS = 60_000L;
 
     private final NadiaPluginContext pluginContext;
     private final SlackMarkdownConverter markdownConverter;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient;
     private final Runnable statusChangeCallback;
+    private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
 
     private volatile String apiBaseUrl = DEFAULT_SLACK_API_BASE;
     private volatile SlackConfig activeConfig = SlackConfig.defaults();
@@ -139,7 +147,7 @@ public class SlackSocketClient {
         connectSocketModeOnce();
     }
 
-    private synchronized void connectSocketModeOnce() {
+    private void connectSocketModeOnce() {
         if (!desiredActive) {
             return;
         }
@@ -156,6 +164,9 @@ public class SlackSocketClient {
 
             HttpResponse<String> openResp = httpClient.send(openReq,
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (!desiredActive) {
+                return;
+            }
             JsonNode root = objectMapper.readTree(openResp.body());
             if (!root.path("ok").asBoolean(false)) {
                 String err = root.path("error").asText("connection_open_failed");
@@ -177,15 +188,26 @@ public class SlackSocketClient {
                     .buildAsync(URI.create(wssUrl), new SocketModeListener())
                     .get(15, TimeUnit.SECONDS);
 
-            this.activeWebSocket = ws;
-            this.running = true;
+            synchronized (this) {
+                if (!desiredActive) {
+                    ws.abort();
+                    return;
+                }
+                WebSocket previous = this.activeWebSocket;
+                this.activeWebSocket = ws;
+                this.running = true;
+                reconnectAttempts.set(0);
+                if (previous != null && previous != ws) {
+                    previous.abort();
+                }
+            }
             updateStatus("Connected");
             logger.info("[SlackPlugin] Slack Socket Mode WebSocket connected.");
         } catch (Exception e) {
             this.running = false;
             updateStatus("Error: " + e.getMessage());
             logger.warn("[SlackPlugin] Failed to open Slack Socket Mode connection: {}", e.getMessage());
-            scheduleReconnect(5000L);
+            scheduleReconnectWithBackoff();
         }
     }
 
@@ -195,6 +217,7 @@ public class SlackSocketClient {
      */
     public synchronized void stop() {
         this.desiredActive = false;
+        reconnectAttempts.set(0);
         if (pendingReconnect != null) {
             pendingReconnect.cancel(false);
             pendingReconnect = null;
@@ -214,6 +237,17 @@ public class SlackSocketClient {
             }
         }
         updateStatus(this.activeConfig.enabled() ? "Disconnected" : "Disabled");
+    }
+
+    /**
+     * Stops Socket Mode and closes the underlying {@link HttpClient} selector pool on plugin unload.
+     */
+    public void close() {
+        stop();
+        try {
+            httpClient.close();
+        } catch (Exception ignored) {
+        }
     }
 
     /**
@@ -317,7 +351,7 @@ public class SlackSocketClient {
                     StringBuilder combined = new StringBuilder();
                     boolean multiTurn = turns.size() > 1;
                     for (PluginChatTurn turn : turns) {
-                        if (turn == null || turn.markdown() == null || turn.markdown().isBlank()) {
+                        if (turn == null || turn.text() == null || turn.text().isBlank()) {
                             continue;
                         }
                         if (!combined.isEmpty()) {
@@ -326,7 +360,7 @@ public class SlackSocketClient {
                         if (multiTurn && turn.staffName() != null && !turn.staffName().isBlank()) {
                             combined.append("**[").append(turn.staffName()).append("]**\n");
                         }
-                        combined.append(turn.markdown().trim());
+                        combined.append(turn.text().trim());
                     }
                     if (!combined.isEmpty()) {
                         String mrkdwn = markdownConverter.toSlackMrkdwn(combined.toString());
@@ -463,7 +497,7 @@ public class SlackSocketClient {
         if (text == null) {
             return "";
         }
-        return text.replaceAll("<@[A-Z0-9]+>", "").trim();
+        return MENTION_TAG_PATTERN.matcher(text).replaceAll("").trim();
     }
 
     /**
@@ -494,7 +528,7 @@ public class SlackSocketClient {
         String lower = prompt.toLowerCase();
         for (String staff : staffNames) {
             String lowerStaff = staff.toLowerCase();
-            String noSpaceStaff = staff.replaceAll("\\s+", "").toLowerCase();
+            String noSpaceStaff = WHITESPACE_PATTERN.matcher(lowerStaff).replaceAll("");
             String[] prefixes = {
                     "ask @" + lowerStaff,
                     "ask " + lowerStaff,
@@ -559,6 +593,13 @@ public class SlackSocketClient {
         }
     }
 
+    private void scheduleReconnectWithBackoff() {
+        int attempt = Math.min(reconnectAttempts.getAndIncrement(), 6);
+        long baseDelay = Math.min(MAX_RECONNECT_BACKOFF_MS, 2000L << attempt);
+        long jitter = ThreadLocalRandom.current().nextLong(250L, 1250L);
+        scheduleReconnect(Math.min(MAX_RECONNECT_BACKOFF_MS, baseDelay + jitter));
+    }
+
     private synchronized void scheduleReconnect(long delayMs) {
         if (!desiredActive || reconnectExecutor == null || reconnectExecutor.isShutdown()) {
             return;
@@ -599,7 +640,7 @@ public class SlackSocketClient {
     }
 
     private final class SocketModeListener implements WebSocket.Listener {
-        private final StringBuilder frameBuffer = new StringBuilder();
+        private StringBuilder frameBuffer = new StringBuilder();
 
         @Override
         public void onOpen(WebSocket webSocket) {
@@ -611,7 +652,11 @@ public class SlackSocketClient {
             frameBuffer.append(data);
             if (last) {
                 String json = frameBuffer.toString();
-                frameBuffer.setLength(0);
+                if (frameBuffer.capacity() > MAX_FRAME_BUFFER_CAPACITY) {
+                    frameBuffer = new StringBuilder();
+                } else {
+                    frameBuffer.setLength(0);
+                }
                 handleSocketEnvelope(json, webSocket);
             }
             webSocket.request(1);
@@ -623,7 +668,7 @@ public class SlackSocketClient {
             running = false;
             if (desiredActive) {
                 updateStatus("Reconnecting...");
-                scheduleReconnect(2000L);
+                scheduleReconnectWithBackoff();
             }
             return null;
         }
@@ -633,7 +678,7 @@ public class SlackSocketClient {
             running = false;
             if (desiredActive) {
                 updateStatus("Error: " + (error != null ? error.getMessage() : "socket error"));
-                scheduleReconnect(5000L);
+                scheduleReconnectWithBackoff();
             }
         }
     }

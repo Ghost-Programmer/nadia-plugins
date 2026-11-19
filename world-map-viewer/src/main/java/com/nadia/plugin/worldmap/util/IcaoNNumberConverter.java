@@ -225,10 +225,12 @@ public final class IcaoNNumberConverter {
      * @return the resolved US N-number with 'N' prefix, or {@code null} if no US
      *         registration matches
      */
+    private static final java.util.regex.Pattern N_NUMBER_PATTERN = java.util.regex.Pattern.compile("^N[1-9][0-9A-Z]{0,4}$");
+
     public static String extractNNumber(String callsign, String icaoHex) {
         if (callsign != null) {
             String trimmedCallsign = callsign.trim().toUpperCase(Locale.ROOT);
-            if (trimmedCallsign.matches("^N[1-9][0-9A-Z]{0,4}$")) {
+            if (N_NUMBER_PATTERN.matcher(trimmedCallsign).matches()) {
                 return trimmedCallsign;
             }
         }

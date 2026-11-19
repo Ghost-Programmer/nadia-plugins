@@ -206,6 +206,6 @@ public final class WorldMapRuntime {
         aviationService.shutdown();
         satelliteService.shutdown();
         earthquakeService.shutdown();
-        faaRegistryService.clearCache();
+        faaRegistryService.shutdown();
     }
 }

@@ -273,6 +273,7 @@ public class AviationService {
             int plottedCount = 0;
 
             if (statesNode != null && statesNode.isArray()) {
+                java.util.List<MapService.PlotRequest> batch = new java.util.ArrayList<>(statesNode.size());
                 for (JsonNode stateNode : statesNode) {
                     if (stateNode.isArray() && stateNode.size() >= 10) {
                         String icao24 = stateNode.get(0).asText();
@@ -333,7 +334,7 @@ public class AviationService {
                         meta.put("lon", lon);
 
                         if (faaRegistryService != null && nNumber != null && !nNumber.isEmpty()) {
-                            FaaAircraftRecord cached = faaRegistryService.getCachedRecords().get(nNumber);
+                            FaaAircraftRecord cached = faaRegistryService.getCachedRecord(nNumber);
                             if (cached != null) {
                                 meta.put("faa", cached.toMap());
                             } else {
@@ -341,10 +342,11 @@ public class AviationService {
                             }
                         }
 
-                        mapService.plotObject(callsign, lat, lon, heading, false, "plane", meta);
+                        batch.add(new MapService.PlotRequest(callsign, lat, lon, heading, false, "plane", meta));
                         plottedCount++;
                     }
                 }
+                mapService.plotObjectsBatch(batch);
             }
 
             return String.format(Locale.US,

@@ -1475,8 +1475,15 @@ svg.leaflet-image-layer.leaflet-interactive path {
             return '236, 72, 153'; // Magenta / Jet Stream
         }
 
-        function renderWindFrame() {
+        var lastWindFrameTs = 0;
+
+        function renderWindFrame(ts) {
             if (!windyActive || !windCtx || !map || !windCanvas) return;
+            if (ts && (ts - lastWindFrameTs) < 33) {
+                windAnimId = requestAnimationFrame(renderWindFrame);
+                return;
+            }
+            lastWindFrameTs = ts || performance.now();
 
             var size = map.getSize();
             var bounds = map.getBounds();
@@ -1487,6 +1494,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
             // Clear frame completely - always 100% transparent
             windCtx.clearRect(0, 0, windCanvas.width, windCanvas.height);
+            windCtx.lineCap = 'round';
 
             // Compute exact pixels-per-degree scale factor at current zoom
             var zoom = map.getZoom();
@@ -2044,7 +2052,6 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
         function plotObject(name, lat, lon, heading, pathColor, shouldPan, iconType, metadata) {
             if (!map) return;
-            map.invalidateSize();
 
             var latlng = [lat, lon];
             var rotation = heading || 0;
@@ -2175,16 +2182,17 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
             // Update/Draw label text near the latest point
             if (obj.label) {
-                map.removeLayer(obj.label);
+                obj.label.setLatLng(latlng);
+            } else {
+                obj.label = L.marker(latlng, {
+                    icon: L.divIcon({
+                        className: 'object-label-container',
+                        html: '<div class="object-label-badge" style="border-color: ' + effectiveLabelColor + ';">' + labelText + '</div>',
+                        iconSize: null,
+                        iconAnchor: [-12, 12]
+                    })
+                }).addTo(map);
             }
-            obj.label = L.marker(latlng, {
-                icon: L.divIcon({
-                    className: 'object-label-container',
-                    html: '<div class="object-label-badge" style="border-color: ' + effectiveLabelColor + ';">' + labelText + '</div>',
-                    iconSize: null,
-                    iconAnchor: [-12, 12]
-                })
-            }).addTo(map);
 
             // Center map on the latest coordinate only if shouldPan is true
             if (shouldPan) {
@@ -2192,9 +2200,46 @@ svg.leaflet-image-layer.leaflet-interactive path {
             }
         }
 
+        function syncMapState(state) {
+            if (!map || !state) return;
+            var incomingObjs = Array.isArray(state.objects) ? state.objects : [];
+            var seenNames = {};
+            for (var i = 0; i < incomingObjs.length; i++) {
+                var item = incomingObjs[i];
+                if (!item || !item.name || !Array.isArray(item.path) || item.path.length === 0) continue;
+                seenNames[item.name] = true;
+                var latest = item.path[item.path.length - 1];
+                plotObject(item.name, latest[0], latest[1], item.heading || 0, item.color || '#00ffff', Boolean(item.shouldPan), item.iconType || 'plane', item.metadata || null);
+                var existing = objects[item.name];
+                if (existing && existing.polyline && (item.iconType || 'plane') !== 'earthquake') {
+                    existing.path = item.path;
+                    existing.polyline.setLatLngs(item.path);
+                }
+            }
+            for (var key in objects) {
+                if (Object.prototype.hasOwnProperty.call(objects, key) && !seenNames[key]) {
+                    var stale = objects[key];
+                    if (stale.polyline) map.removeLayer(stale.polyline);
+                    if (stale.marker) map.removeLayer(stale.marker);
+                    if (stale.label) map.removeLayer(stale.label);
+                    delete objects[key];
+                }
+            }
+            if (Array.isArray(flags)) {
+                for (var f = 0; f < flags.length; f++) {
+                    map.removeLayer(flags[f]);
+                }
+                flags = [];
+            }
+            var incomingFlags = Array.isArray(state.flags) ? state.flags : [];
+            for (var j = 0; j < incomingFlags.length; j++) {
+                var fl = incomingFlags[j];
+                setFlag(fl.lat, fl.lon, fl.color);
+            }
+        }
+
         function setFlag(lat, lon, colorName) {
             if (!map) return;
-            map.invalidateSize();
 
             var latlng = [lat, lon];
             

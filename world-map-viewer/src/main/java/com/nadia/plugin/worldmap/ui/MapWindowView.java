@@ -1286,7 +1286,7 @@ public class MapWindowView extends BorderPane {
             }
 
             if (statusBadge != null) {
-                int objCount = mapService.getObjects().size();
+                int objCount = mapService.getObjectCount();
                 int activeTrackers = (planesActive ? 1 : 0) + (satellitesActive ? 1 : 0) + (earthquakesActive ? 1 : 0);
                 if (activeTrackers > 1) {
                     statusBadge.setText("● Tracking Active (" + objCount + " objects)");
@@ -1318,42 +1318,48 @@ public class MapWindowView extends BorderPane {
         });
     }
 
+    private final java.util.concurrent.atomic.AtomicBoolean pendingReplay = new java.util.concurrent.atomic.AtomicBoolean(false);
+
     private void replayHistory() {
         if (!isLoaded)
             return;
+        if (!pendingReplay.compareAndSet(false, true)) {
+            return;
+        }
 
         Platform.runLater(() -> {
+            pendingReplay.set(false);
             try {
-                webEngine.executeScript("clearMap();");
-
                 List<MapObject> objects = mapService.getObjects();
+                List<Map<String, Object>> jsObjects = new java.util.ArrayList<>(objects.size());
                 for (MapObject obj : objects) {
-                    String color = getHexColor(obj.name);
-                    for (Location loc : obj.path) {
-                        Map<String, Object> meta = (loc.metadata != null && !loc.metadata.isEmpty()) ? loc.metadata
-                                : obj.metadata;
-                        String metaJson = "null";
-                        if (meta != null && !meta.isEmpty()) {
-                            try {
-                                metaJson = objectMapper.writeValueAsString(meta);
-                            } catch (Exception e) {
-                                logger.warn("Failed to serialize location metadata", e);
-                            }
-                        }
-                        String script = String.format(Locale.US, "plotObject('%s', %f, %f, %f, '%s', %b, '%s', %s);",
-                                escapeJavaScript(obj.name), loc.latitude, loc.longitude, loc.heading, color,
-                                loc.shouldPan, escapeJavaScript(loc.iconType), metaJson);
-                        webEngine.executeScript(script);
+                    if (obj.path.isEmpty()) {
+                        continue;
                     }
+                    Location latest = obj.path.get(obj.path.size() - 1);
+                    List<double[]> coords = new java.util.ArrayList<>(obj.path.size());
+                    for (Location loc : obj.path) {
+                        coords.add(new double[]{loc.latitude, loc.longitude});
+                    }
+                    Map<String, Object> entry = new java.util.LinkedHashMap<>();
+                    entry.put("name", obj.name);
+                    entry.put("color", getHexColor(obj.name));
+                    entry.put("iconType", latest.iconType);
+                    entry.put("heading", latest.heading);
+                    entry.put("shouldPan", latest.shouldPan);
+                    entry.put("path", coords);
+                    entry.put("metadata", obj.metadata);
+                    jsObjects.add(entry);
                 }
 
                 List<MapFlag> flags = mapService.getFlags();
+                List<Map<String, Object>> jsFlags = new java.util.ArrayList<>(flags.size());
                 for (MapFlag flag : flags) {
-                    String script = String.format(Locale.US, "setFlag(%f, %f, '%s');",
-                            flag.latitude, flag.longitude, escapeJavaScript(flag.color));
-                    webEngine.executeScript(script);
+                    jsFlags.add(Map.of("lat", flag.latitude, "lon", flag.longitude, "color", flag.color));
                 }
 
+                String stateJson = objectMapper.writeValueAsString(Map.of("objects", jsObjects, "flags", jsFlags));
+                webEngine.executeScript("syncMapState(" + stateJson + ");");
                 updateTrackingButtonsState();
             } catch (Exception e) {
                 logger.error("[MapWindowView] Error executing map script", e);

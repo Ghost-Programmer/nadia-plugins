@@ -209,9 +209,12 @@
 
         el.messagesContainer.innerHTML = "";
         state.messagesById.clear();
+        const frag = document.createDocumentFragment();
         for (const msg of messages) {
-            appendMessageBubbleDom(msg, false);
+            appendMessageBubbleDom(msg, false, frag, true);
         }
+        el.messagesContainer.appendChild(frag);
+        runMermaidInContainer(el.messagesContainer);
         const isThinking = Boolean(data.session && data.session.thinking);
         el.thinkingRow.classList.toggle("hidden", !isThinking);
         scrollToBottom();
@@ -225,7 +228,14 @@
         });
         const data = await resp.json();
         if (data.session) {
-            await loadSessions();
+            if (!state.sessions.some(s => s.id === data.session.id)) {
+                const cronIdx = state.sessions.findIndex(s => s.cronSession);
+                if (cronIdx >= 0) {
+                    state.sessions.splice(cronIdx, 0, data.session);
+                } else {
+                    state.sessions.push(data.session);
+                }
+            }
             await selectSession(data.session.id);
             el.chatInput.focus();
         }
@@ -342,30 +352,38 @@
             .replace(/"/g, "&quot;");
     }
 
+    let cachedMarkedRenderer = null;
+
+    function getMarkedRenderer() {
+        if (cachedMarkedRenderer) {
+            return cachedMarkedRenderer;
+        }
+        const renderer = new window.marked.Renderer();
+        renderer.code = function (codeObjOrText, infostring) {
+            const text = typeof codeObjOrText === "object" ? codeObjOrText.text : codeObjOrText;
+            const lang = (typeof codeObjOrText === "object" ? codeObjOrText.lang : infostring) || "";
+            const cleanLang = lang.trim().toLowerCase();
+            if (cleanLang === "mermaid") {
+                return `<div class="mermaid-container"><div class="mermaid">${escapeHtml(text)}</div></div>`;
+            }
+            let highlighted = escapeHtml(text);
+            if (window.hljs && cleanLang && window.hljs.getLanguage(cleanLang)) {
+                try {
+                    highlighted = window.hljs.highlight(text, { language: cleanLang }).value;
+                } catch (_) {}
+            }
+            return `<div class="code-block-wrapper"><div class="code-block-header"><span>${escapeHtml(cleanLang || "code")}</span><button type="button" class="copy-code-btn">📋 Copy</button></div><pre><code>${highlighted}</code></pre></div>`;
+        };
+        cachedMarkedRenderer = renderer;
+        return renderer;
+    }
+
     function renderMarkdownHtml(markdown) {
         const src = String(markdown || "");
         let rawHtml;
 
         if (window.marked && typeof window.marked.parse === "function") {
-            const renderer = new window.marked.Renderer();
-            renderer.code = function (codeObjOrText, infostring) {
-                const text = typeof codeObjOrText === "object" ? codeObjOrText.text : codeObjOrText;
-                const lang = (typeof codeObjOrText === "object" ? codeObjOrText.lang : infostring) || "";
-                const cleanLang = lang.trim().toLowerCase();
-                if (cleanLang === "mermaid") {
-                    return `<div class="mermaid-container"><div class="mermaid">${escapeHtml(text)}</div></div>`;
-                }
-                let highlighted = escapeHtml(text);
-                if (window.hljs) {
-                    try {
-                        highlighted = cleanLang && window.hljs.getLanguage(cleanLang)
-                            ? window.hljs.highlight(text, { language: cleanLang }).value
-                            : window.hljs.highlightAuto(text).value;
-                    } catch (_) {}
-                }
-                return `<div class="code-block-wrapper"><div class="code-block-header"><span>${escapeHtml(cleanLang || "code")}</span><button type="button" class="copy-code-btn">📋 Copy</button></div><pre><code>${highlighted}</code></pre></div>`;
-            };
-            rawHtml = window.marked.parse(src, { gfm: true, breaks: true, renderer });
+            rawHtml = window.marked.parse(src, { gfm: true, breaks: true, renderer: getMarkedRenderer() });
         } else {
             rawHtml = fallbackMarkdownRender(src);
         }
@@ -443,7 +461,18 @@
         });
     }
 
-    function activateInteractiveBlocks(container) {
+    function runMermaidInContainer(container) {
+        if (window.mermaid && container) {
+            const mermaidNodes = container.querySelectorAll(".mermaid");
+            if (mermaidNodes.length > 0) {
+                try {
+                    window.mermaid.run({ nodes: mermaidNodes });
+                } catch (_) {}
+            }
+        }
+    }
+
+    function activateInteractiveBlocks(container, deferMermaid) {
         container.querySelectorAll(".copy-code-btn").forEach(btn => {
             btn.addEventListener("click", (ev) => {
                 ev.stopPropagation();
@@ -456,17 +485,12 @@
             });
         });
 
-        if (window.mermaid) {
-            const mermaidNodes = container.querySelectorAll(".mermaid");
-            if (mermaidNodes.length > 0) {
-                try {
-                    window.mermaid.run({ nodes: mermaidNodes });
-                } catch (_) {}
-            }
+        if (!deferMermaid) {
+            runMermaidInContainer(container);
         }
     }
 
-    function appendMessageBubbleDom(msg, autoScroll) {
+    function appendMessageBubbleDom(msg, autoScroll, targetContainer, deferMermaid) {
         state.messagesById.set(msg.id, msg);
 
         const row = document.createElement("div");
@@ -486,7 +510,7 @@
         const mdContainer = document.createElement("div");
         mdContainer.className = "markdown-body";
         mdContainer.innerHTML = renderMarkdownHtml(msg.markdown);
-        activateInteractiveBlocks(mdContainer);
+        activateInteractiveBlocks(mdContainer, Boolean(deferMermaid));
 
         bubble.appendChild(mdContainer);
 
@@ -504,7 +528,7 @@
         block.appendChild(timeEl);
         block.appendChild(bubble);
         row.appendChild(block);
-        el.messagesContainer.appendChild(row);
+        (targetContainer || el.messagesContainer).appendChild(row);
 
         if (autoScroll) {
             scrollToBottom();
@@ -526,31 +550,44 @@
             showToast("File attachments are disabled in Web Interface Settings.");
             return;
         }
-        for (const file of Array.from(fileList)) {
+        const files = Array.from(fileList);
+        const validFiles = [];
+        for (const file of files) {
             if (file.size > state.config.maxUploadMb * 1024 * 1024) {
                 showToast(`"${file.name}" exceeds ${state.config.maxUploadMb} MB upload limit.`);
-                continue;
+            } else {
+                validFiles.push(file);
             }
-            try {
-                const resp = await apiFetch("/api/upload", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/octet-stream",
-                        "X-File-Name": encodeURIComponent(file.name)
-                    },
-                    body: file
-                });
-                if (!resp.ok) {
-                    const err = await resp.json().catch(() => ({}));
-                    showToast(err.error || `Failed to upload ${file.name}`);
-                    continue;
-                }
-                const uploaded = await resp.json();
-                state.pendingAttachments.push(uploaded);
-                renderAttachmentChips();
-            } catch (_) {
-                showToast(`Upload failed for ${file.name}`);
+        }
+        if (validFiles.length === 0) return;
+
+        const results = await Promise.allSettled(validFiles.map(async (file) => {
+            const resp = await apiFetch("/api/upload", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/octet-stream",
+                    "X-File-Name": encodeURIComponent(file.name)
+                },
+                body: file
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.error || `Failed to upload ${file.name}`);
             }
+            return resp.json();
+        }));
+
+        let addedAny = false;
+        results.forEach((res, idx) => {
+            if (res.status === "fulfilled" && res.value) {
+                state.pendingAttachments.push(res.value);
+                addedAny = true;
+            } else if (res.status === "rejected") {
+                showToast(res.reason?.message || `Upload failed for ${validFiles[idx].name}`);
+            }
+        });
+        if (addedAny) {
+            renderAttachmentChips();
         }
     }
 

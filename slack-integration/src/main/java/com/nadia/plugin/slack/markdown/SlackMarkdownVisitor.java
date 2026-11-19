@@ -233,8 +233,8 @@ public class SlackMarkdownVisitor extends AbstractVisitor {
         }
 
         visitChildren(listItem);
-        if (!builder.toString().endsWith("\n")) {
-            builder.append("\n");
+        if (builder.isEmpty() || builder.charAt(builder.length() - 1) != '\n') {
+            builder.append('\n');
         }
     }
 
@@ -333,26 +333,31 @@ public class SlackMarkdownVisitor extends AbstractVisitor {
         builder.append("```\n");
         for (int r = 0; r < rows.size(); r++) {
             List<String> row = rows.get(r);
-            StringBuilder line = new StringBuilder();
             for (int c = 0; c < row.size(); c++) {
                 String cell = row.get(c);
                 int width = colWidths.get(c);
-                line.append(String.format("%-" + width + "s", cell));
+                builder.append(cell);
+                int pad = width - cell.length();
+                for (int p = 0; p < pad; p++) {
+                    builder.append(' ');
+                }
                 if (c < row.size() - 1) {
-                    line.append(" | ");
+                    builder.append(" | ");
                 }
             }
-            builder.append(line).append("\n");
+            builder.append('\n');
 
             if (r == 0 && rows.size() > 1) {
-                StringBuilder sep = new StringBuilder();
                 for (int c = 0; c < colWidths.size(); c++) {
-                    sep.append("-".repeat(Math.max(1, colWidths.get(c))));
+                    int w = Math.max(1, colWidths.get(c));
+                    for (int p = 0; p < w; p++) {
+                        builder.append('-');
+                    }
                     if (c < colWidths.size() - 1) {
-                        sep.append("-+-");
+                        builder.append("-+-");
                     }
                 }
-                builder.append(sep).append("\n");
+                builder.append('\n');
             }
         }
         builder.append("```\n\n");

@@ -213,6 +213,17 @@ public final class WebInterfaceRuntime {
         }
     }
 
+    /**
+     * Unregisters a previously added status listener.
+     *
+     * @param listener status change callback to remove
+     */
+    public void removeStatusListener(Runnable listener) {
+        if (listener != null) {
+            statusListeners.remove(listener);
+        }
+    }
+
     private void notifyStatusListeners() {
         for (Runnable r : statusListeners) {
             try {

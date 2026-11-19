@@ -60,6 +60,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class WebInterfaceServer {
 
     private static final Logger logger = LoggerFactory.getLogger(WebInterfaceServer.class);
+    private static final java.util.regex.Pattern WHITESPACE_PATTERN = java.util.regex.Pattern.compile("\\s+");
+    private static final java.util.regex.Pattern UNSAFE_FILENAME_PATTERN = java.util.regex.Pattern.compile("[\\\\/:*?\"<>|\\p{Cntrl}]");
+    private static final byte[] SSE_HEARTBEAT_BYTES = ": keepalive\n\n".getBytes(StandardCharsets.UTF_8);
+    private static final long UPLOAD_TTL_MS = 30L * 60L * 1000L;
 
     private final NadiaPluginContext pluginContext;
     private final WebChatSessionStore sessionStore;
@@ -67,7 +71,11 @@ public class WebInterfaceServer {
     private final Path uploadsDir;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private final Map<String, Path> uploadedAttachments = new ConcurrentHashMap<>();
+    private record StagedAttachment(Path path, long uploadedAtMs) {}
+    private record CachedStaticAsset(long lastModifiedMs, String etag, byte[] rawBytes, byte[] gzipBytes) {}
+
+    private final Map<String, StagedAttachment> uploadedAttachments = new ConcurrentHashMap<>();
+    private final Map<String, CachedStaticAsset> staticAssetCache = new ConcurrentHashMap<>();
     private final List<SseClient> sseClients = new CopyOnWriteArrayList<>();
 
     private volatile WebInterfaceConfig activeConfig = WebInterfaceConfig.defaults();
@@ -87,13 +95,12 @@ public class WebInterfaceServer {
             this.outputStream = outputStream;
         }
 
-        synchronized boolean sendEvent(String eventType, String jsonData) {
+        synchronized boolean sendRawBytes(byte[] frameBytes) {
             if (closed.get()) {
                 return false;
             }
             try {
-                String frame = "event: " + eventType + "\ndata: " + jsonData + "\n\n";
-                outputStream.write(frame.getBytes(StandardCharsets.UTF_8));
+                outputStream.write(frameBytes);
                 outputStream.flush();
                 return true;
             } catch (IOException e) {
@@ -102,18 +109,13 @@ public class WebInterfaceServer {
             }
         }
 
-        synchronized boolean sendHeartbeat() {
-            if (closed.get()) {
-                return false;
-            }
-            try {
-                outputStream.write(": keepalive\n\n".getBytes(StandardCharsets.UTF_8));
-                outputStream.flush();
-                return true;
-            } catch (IOException e) {
-                closeQuietly();
-                return false;
-            }
+        boolean sendEvent(String eventType, String jsonData) {
+            String frame = "event: " + eventType + "\ndata: " + jsonData + "\n\n";
+            return sendRawBytes(frame.getBytes(StandardCharsets.UTF_8));
+        }
+
+        boolean sendHeartbeat() {
+            return sendRawBytes(SSE_HEARTBEAT_BYTES);
         }
 
         void closeQuietly() {
@@ -427,20 +429,69 @@ public class WebInterfaceServer {
             return;
         }
 
-        byte[] content = Files.readAllBytes(targetFile);
+        long lastMod = Files.getLastModifiedTime(targetFile).toMillis();
+        CachedStaticAsset cached = staticAssetCache.compute(cleanRel, (k, existing) -> {
+            if (existing != null && existing.lastModifiedMs() == lastMod) {
+                return existing;
+            }
+            try {
+                byte[] raw = Files.readAllBytes(targetFile);
+                byte[] gz = gzipBytes(raw);
+                String etag = "\"" + lastMod + "-" + raw.length + "\"";
+                return new CachedStaticAsset(lastMod, etag, raw, gz);
+            } catch (IOException e) {
+                return existing;
+            }
+        });
+        if (cached == null) {
+            sendJson(exchange, 500, Map.of("error", "Failed to read asset"));
+            return;
+        }
+
         exchange.getResponseHeaders().set("Content-Type", guessContentType(cleanRel));
         exchange.getResponseHeaders().set("Cache-Control", "no-cache, must-revalidate");
+        exchange.getResponseHeaders().set("ETag", cached.etag());
+        exchange.getResponseHeaders().set("Vary", "Accept-Encoding");
         exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+
+        String ifNoneMatch = exchange.getRequestHeaders().getFirst("If-None-Match");
+        if (cached.etag().equals(ifNoneMatch)) {
+            exchange.sendResponseHeaders(304, -1);
+            exchange.close();
+            return;
+        }
+
+        String acceptEncoding = exchange.getRequestHeaders().getFirst("Accept-Encoding");
+        boolean useGzip = acceptEncoding != null && acceptEncoding.toLowerCase().contains("gzip")
+                && cached.gzipBytes() != null && cached.gzipBytes().length < cached.rawBytes().length;
+        byte[] payload = useGzip ? cached.gzipBytes() : cached.rawBytes();
+        if (useGzip) {
+            exchange.getResponseHeaders().set("Content-Encoding", "gzip");
+        }
 
         if ("HEAD".equalsIgnoreCase(exchange.getRequestMethod())) {
             exchange.sendResponseHeaders(200, -1);
         } else {
-            exchange.sendResponseHeaders(200, content.length);
+            exchange.sendResponseHeaders(200, payload.length);
             try (OutputStream os = exchange.getResponseBody()) {
-                os.write(content);
+                os.write(payload);
             }
         }
         exchange.close();
+    }
+
+    private static byte[] gzipBytes(byte[] raw) {
+        if (raw == null || raw.length < 512) {
+            return null;
+        }
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream(raw.length / 2);
+             java.util.zip.GZIPOutputStream gz = new java.util.zip.GZIPOutputStream(baos)) {
+            gz.write(raw);
+            gz.finish();
+            return baos.toByteArray();
+        } catch (IOException e) {
+            return null;
+        }
     }
 
     private void handleConfig(HttpExchange exchange) throws IOException {
@@ -559,25 +610,27 @@ public class WebInterfaceServer {
         String safeFileName = sanitizeFileName(decodedName);
 
         long maxBytes = activeConfig.maxUploadMb() * 1024L * 1024L;
-        byte[] fileBytes;
-        try {
-            fileBytes = readLimitedBytes(exchange.getRequestBody(), maxBytes);
-        } catch (IllegalArgumentException oversize) {
-            sendJson(exchange, 413, Map.of("error", oversize.getMessage()));
-            return;
-        }
-
         String attachmentId = "att-" + UUID.randomUUID().toString();
         Path subDir = uploadsDir.resolve(attachmentId);
         Files.createDirectories(subDir);
         Path savedFile = subDir.resolve(safeFileName);
-        Files.write(savedFile, fileBytes);
-        uploadedAttachments.put(attachmentId, savedFile);
+        long writtenBytes;
+        try {
+            writtenBytes = streamToFileWithLimit(exchange.getRequestBody(), savedFile, maxBytes);
+        } catch (IllegalArgumentException oversize) {
+            deleteUploadQuietly(savedFile);
+            sendJson(exchange, 413, Map.of("error", oversize.getMessage()));
+            return;
+        } catch (IOException ioEx) {
+            deleteUploadQuietly(savedFile);
+            throw ioEx;
+        }
+        uploadedAttachments.put(attachmentId, new StagedAttachment(savedFile, System.currentTimeMillis()));
 
         sendJson(exchange, 200, Map.of(
                 "attachmentId", attachmentId,
                 "fileName", safeFileName,
-                "sizeBytes", fileBytes.length
+                "sizeBytes", writtenBytes
         ));
     }
 
@@ -604,7 +657,8 @@ public class WebInterfaceServer {
         JsonNode attArray = body.get("attachmentIds");
         if (attArray != null && attArray.isArray()) {
             for (JsonNode idNode : attArray) {
-                Path p = uploadedAttachments.remove(idNode.asText(""));
+                StagedAttachment staged = uploadedAttachments.remove(idNode.asText(""));
+                Path p = staged != null ? staged.path() : null;
                 if (p != null && Files.isRegularFile(p)) {
                     File f = p.toFile();
                     attachedFiles.add(f);
@@ -728,6 +782,13 @@ public class WebInterfaceServer {
         } finally {
             sessionStore.setThinking(sessionId, false);
             broadcastEvent("thinking_changed", Map.of("sessionId", sessionId, "thinking", false));
+            if (attachedFiles != null) {
+                for (File f : attachedFiles) {
+                    if (f != null) {
+                        deleteUploadQuietly(f.toPath());
+                    }
+                }
+            }
         }
     }
 
@@ -790,25 +851,38 @@ public class WebInterfaceServer {
         if (sseClients.isEmpty()) {
             return;
         }
-        String json;
+        byte[] frameBytes;
         try {
-            json = objectMapper.writeValueAsString(payload);
+            String json = objectMapper.writeValueAsString(payload);
+            frameBytes = ("event: " + eventType + "\ndata: " + json + "\n\n").getBytes(StandardCharsets.UTF_8);
         } catch (Exception e) {
             return;
         }
         for (SseClient client : sseClients) {
-            if (!client.sendEvent(eventType, json)) {
-                sseClients.remove(client);
-            }
+            Thread.ofVirtual().name("web-sse-send").start(() -> {
+                if (!client.sendRawBytes(frameBytes)) {
+                    sseClients.remove(client);
+                }
+            });
         }
     }
 
     private void pruneAndHeartbeatClients() {
         for (SseClient client : sseClients) {
-            if (!client.sendHeartbeat()) {
-                sseClients.remove(client);
-            }
+            Thread.ofVirtual().name("web-sse-hb").start(() -> {
+                if (!client.sendHeartbeat()) {
+                    sseClients.remove(client);
+                }
+            });
         }
+        long cutoff = System.currentTimeMillis() - UPLOAD_TTL_MS;
+        uploadedAttachments.entrySet().removeIf(entry -> {
+            if (entry.getValue().uploadedAtMs() < cutoff) {
+                deleteUploadQuietly(entry.getValue().path());
+                return true;
+            }
+            return false;
+        });
     }
 
     private boolean requireAuth(HttpExchange exchange) throws IOException {
@@ -872,7 +946,7 @@ public class WebInterfaceServer {
         for (PluginStaffDescriptor staff : sorted) {
             String staffName = staff.name();
             String lowerName = staffName.toLowerCase();
-            String noSpaceName = staffName.replaceAll("\\s+", "").toLowerCase();
+            String noSpaceName = WHITESPACE_PATTERN.matcher(lowerName).replaceAll("");
 
             String[] targets = {
                     "ask @" + lowerName,
@@ -1019,11 +1093,41 @@ public class WebInterfaceServer {
         if (slash >= 0) {
             base = base.substring(slash + 1);
         }
-        String cleaned = base.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_").trim();
+        String cleaned = UNSAFE_FILENAME_PATTERN.matcher(base).replaceAll("_").trim();
         if (cleaned.isEmpty() || ".".equals(cleaned) || "..".equals(cleaned)) {
             return "attachment.bin";
         }
         return cleaned;
+    }
+
+    private static long streamToFileWithLimit(InputStream in, Path destFile, long maxBytes) throws IOException {
+        byte[] buffer = new byte[16384];
+        long total = 0;
+        try (OutputStream out = Files.newOutputStream(destFile)) {
+            int n;
+            while ((n = in.read(buffer)) != -1) {
+                total += n;
+                if (total > maxBytes) {
+                    throw new IllegalArgumentException("File exceeds maximum upload limit (" + (maxBytes / (1024 * 1024)) + " MB).");
+                }
+                out.write(buffer, 0, n);
+            }
+        }
+        return total;
+    }
+
+    private void deleteUploadQuietly(Path file) {
+        if (file == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(file);
+            Path parent = file.getParent();
+            if (parent != null && parent.startsWith(uploadsDir) && !parent.equals(uploadsDir)) {
+                Files.deleteIfExists(parent);
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private static byte[] readLimitedBytes(InputStream in, long maxBytes) throws IOException {

@@ -11,16 +11,27 @@ import org.pf4j.Extension;
 public class FrenchLanguageExtension implements NadiaLanguageExtension {
 
     private static final String RESOURCE_PATH = "i18n/messages_fr.properties";
+    private volatile LanguagePackDescriptor cached;
 
     @Override
     public LanguagePackDescriptor getLanguagePack() {
-        return new LanguagePackDescriptor(
-                "fr",
-                "French",
-                "Français",
-                "🇫🇷",
-                NadiaLanguageExtension.loadUtf8Properties(getClass().getClassLoader(), RESOURCE_PATH)
-        );
+        LanguagePackDescriptor result = cached;
+        if (result == null) {
+            synchronized (this) {
+                result = cached;
+                if (result == null) {
+                    result = new LanguagePackDescriptor(
+                            "fr",
+                            "French",
+                            "Français",
+                            "🇫🇷",
+                            NadiaLanguageExtension.loadUtf8Properties(getClass().getClassLoader(), RESOURCE_PATH)
+                    );
+                    cached = result;
+                }
+            }
+        }
+        return result;
     }
 }
 
